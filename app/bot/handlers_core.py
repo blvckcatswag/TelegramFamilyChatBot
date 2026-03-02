@@ -92,11 +92,14 @@ async def cmd_status(message: Message):
         state = "\u2705" if settings.get(key) else "\u274c"
         modules.append(f"  {state} {label}")
 
+    modules_text = "\n".join(modules)
+    cities_text = ", ".join(cities) if cities else "\u043d\u0435 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b"
+    weather_time = settings.get("weather_time", "08:00")
     text = (
         "\U0001f4ca <b>\u0421\u0442\u0430\u0442\u0443\u0441 \u0431\u043e\u0442\u0430</b>\n\n"
-        f"<b>\u041c\u043e\u0434\u0443\u043b\u0438:</b>\n" + "\n".join(modules) + "\n\n"
-        f"\U0001f321\ufe0f \u0412\u0440\u0435\u043c\u044f \u043f\u043e\u0433\u043e\u0434\u044b: {settings.get('weather_time', '08:00')}\n"
-        f"\U0001f3d9\ufe0f \u0413\u043e\u0440\u043e\u0434\u0430: {', '.join(cities) if cities else '\u043d\u0435 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b'}\n"
+        f"<b>\u041c\u043e\u0434\u0443\u043b\u0438:</b>\n{modules_text}\n\n"
+        f"\U0001f321\ufe0f \u0412\u0440\u0435\u043c\u044f \u043f\u043e\u0433\u043e\u0434\u044b: {weather_time}\n"
+        f"\U0001f3d9\ufe0f \u0413\u043e\u0440\u043e\u0434\u0430: {cities_text}\n"
         f"\U0001f514 \u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0439: {len(reminders)}\n"
         f"\U0001f3e0 \u041f\u043e\u0440\u044f\u0434\u043e\u043a \u0434\u043e\u043c\u0430: {progress_bar(home)}"
     )
