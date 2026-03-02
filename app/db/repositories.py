@@ -4,22 +4,33 @@ from app.db.database import get_db
 
 # ──────────────────── Chat ────────────────────
 
-async def get_or_create_chat(chat_id: int, title: str | None = None, owner_user_id: int | None = None) -> dict:
+async def get_or_create_chat(
+    chat_id: int,
+    title: str | None = None,
+    owner_user_id: int | None = None,
+) -> dict:
     db = await get_db()
-    row = await db.execute_fetchall("SELECT * FROM Chat WHERE chat_id=?", (chat_id,))
-    if row:
-        return dict(row[0])
+
+    # 1) Создать чат, если его нет. Если есть — не падать.
+    #    Обновляем title/owner только если пришли непустые значения.
     await db.execute(
-        "INSERT INTO Chat (chat_id, title, owner_user_id) VALUES (?, ?, ?)",
+        """
+        INSERT INTO Chat (chat_id, title, owner_user_id)
+        VALUES (?, ?, ?)
+        ON CONFLICT(chat_id) DO UPDATE SET
+            title = COALESCE(excluded.title, Chat.title),
+            owner_user_id = COALESCE(excluded.owner_user_id, Chat.owner_user_id)
+        """,
         (chat_id, title, owner_user_id),
     )
-    await db.execute(
-        "INSERT OR IGNORE INTO Settings (chat_id) VALUES (?)", (chat_id,)
-    )
-    await db.execute(
-        "INSERT OR IGNORE INTO HomeOrder (chat_id) VALUES (?)", (chat_id,)
-    )
+
+    # 2) Связанные таблицы тоже создаём безопасно
+    await db.execute("INSERT OR IGNORE INTO Settings (chat_id) VALUES (?)", (chat_id,))
+    await db.execute("INSERT OR IGNORE INTO HomeOrder (chat_id) VALUES (?)", (chat_id,))
+
     await db.commit()
+
+    # 3) Возвращаем актуальную запись
     row = await db.execute_fetchall("SELECT * FROM Chat WHERE chat_id=?", (chat_id,))
     return dict(row[0])
 
