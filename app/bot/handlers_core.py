@@ -146,10 +146,10 @@ async def cmd_top(message: Message):
         return "\n".join(lines)
 
     text = (
-        "\U0001f3c6 <b>\u0422\u0430\u0431\u043b\u0438\u0446\u0430 \u043b\u0438\u0434\u0435\u0440\u043e\u0432</b>\n\n"
-        f"<b>\U0001f335 \u041a\u0430\u043a\u0442\u0443\u0441:</b>\n{fmt_list(cactus_top, 'height_cm', '\u0441\u043c')}\n\n"
-        f"<b>\U0001f408 \u041a\u043e\u0442:</b>\n{fmt_list(cat_top, 'mood_score', '\u043e\u0447\u043a\u043e\u0432')}\n\n"
-        f"<b>\u2694\ufe0f \u0414\u0443\u044d\u043b\u0438:</b>\n{fmt_list(duel_top, 'wins', '\u043f\u043e\u0431\u0435\u0434')}"
+        "🏆 <b>Таблица лидеров</b>\n\n"
+        f"<b>🌵 Кактус:</b>\n{fmt_list(cactus_top, 'height_cm', 'см')}\n\n"
+        f"<b>🐈 Кот:</b>\n{fmt_list(cat_top, 'mood_score', 'очков')}\n\n"
+        f"<b>⚔️ Дуэли:</b>\n{fmt_list(duel_top, 'wins', 'побед')}"
     )
     await message.answer(text, reply_markup=back_to_menu_kb(), parse_mode="HTML")
 
