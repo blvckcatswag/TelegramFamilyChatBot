@@ -178,13 +178,14 @@ async def cmd_admin_chat(message: Message):
     from app.db.database import get_db
     db = await get_db()
 
-    chat_row = await db.execute_fetchall("SELECT * FROM Chat WHERE chat_id=?", (target_chat_id,))
-    if not chat_row:
+    chat = await db.fetchrow("SELECT * FROM Chat WHERE chat_id=$1", target_chat_id)
+    if not chat:
         await message.answer("❌ Чат не найден.")
         return
 
-    chat = dict(chat_row[0])
-    users = await db.execute_fetchall("SELECT * FROM User WHERE chat_id=?", (target_chat_id,))
+    users = await db.fetch('SELECT * FROM "User" WHERE chat_id=$1', target_chat_id)
+    settings = await repo.get_settings(target_chat_id)
+
     settings = await repo.get_settings(target_chat_id)
 
     text = (

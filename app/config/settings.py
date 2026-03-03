@@ -9,7 +9,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
 SUPERADMIN_ID: int = int(os.getenv("SUPERADMIN_ID", "0"))
 OPENWEATHER_API_KEY: str = os.getenv("OPENWEATHER_API_KEY", "")
+
+# Database: PostgreSQL (production) or SQLite (local dev/tests)
+# postgresql://user:pass@host:port/dbname  OR  sqlite:///path/to/bot.db
+DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'bot.db'}")
+
+# Legacy fallback
 DB_PATH: str = os.getenv("DB_PATH", str(BASE_DIR / "bot.db"))
+
 DEFAULT_WEATHER_TIME: str = os.getenv("DEFAULT_WEATHER_TIME", "07:00")
 DEFAULT_TIMEZONE: str = os.getenv("DEFAULT_TIMEZONE", "Europe/Kiev")
 

@@ -21,7 +21,9 @@ from app.utils.helpers import progress_bar, parse_date, format_birthday_date
 async def setup_db(tmp_path):
     """Use a fresh DB for each test."""
     await close_db()
-    cfg.DB_PATH = str(tmp_path / "test.db")
+    db_path = str(tmp_path / "test.db")
+    cfg.DB_PATH = db_path
+    cfg.DATABASE_URL = f"sqlite:///{db_path}"
     await init_db()
     yield
     await close_db()
