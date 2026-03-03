@@ -3,7 +3,6 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram import F
 from app.db import repositories as repo
-from app.db.database import get_db
 from app.bot.keyboards import back_to_menu_kb
 from app.utils.helpers import mention_user, now_kyiv
 
@@ -23,6 +22,7 @@ AWARD_TYPES = {
 
 
 async def calculate_monthly_awards(chat_id: int, year: int, month: int) -> list[dict]:
+    from app.db.database import get_db
     db = await get_db()
     awards = []
 
@@ -33,11 +33,11 @@ async def calculate_monthly_awards(chat_id: int, year: int, month: int) -> list[
         month_end = f"{year}-{month + 1:02d}-01"
 
     # 1. Cactus king
-    rows = await db.execute_fetchall(
-        "SELECT gc.user_id, gc.height_cm, u.first_name, u.username "
-        "FROM GameCactus gc JOIN User u ON gc.user_id=u.user_id AND gc.chat_id=u.chat_id "
-        "WHERE gc.chat_id=? ORDER BY gc.height_cm DESC LIMIT 1",
-        (chat_id,),
+    rows = await db.fetch(
+        'SELECT gc.user_id, gc.height_cm, u.first_name, u.username '
+        'FROM GameCactus gc JOIN "User" u ON gc.user_id=u.user_id AND gc.chat_id=u.chat_id '
+        'WHERE gc.chat_id=$1 ORDER BY gc.height_cm DESC LIMIT 1',
+        chat_id,
     )
     if rows and rows[0]["height_cm"] > 0:
         awards.append({"type": "cactus_king", "user_id": rows[0]["user_id"],
@@ -45,11 +45,11 @@ async def calculate_monthly_awards(chat_id: int, year: int, month: int) -> list[
                        "name": rows[0]["first_name"] or rows[0]["username"]})
 
     # 2. Cat lover
-    rows = await db.execute_fetchall(
-        "SELECT gc.user_id, gc.mood_score, u.first_name, u.username "
-        "FROM GameCat gc JOIN User u ON gc.user_id=u.user_id AND gc.chat_id=u.chat_id "
-        "WHERE gc.chat_id=? ORDER BY gc.mood_score DESC LIMIT 1",
-        (chat_id,),
+    rows = await db.fetch(
+        'SELECT gc.user_id, gc.mood_score, u.first_name, u.username '
+        'FROM GameCat gc JOIN "User" u ON gc.user_id=u.user_id AND gc.chat_id=u.chat_id '
+        'WHERE gc.chat_id=$1 ORDER BY gc.mood_score DESC LIMIT 1',
+        chat_id,
     )
     if rows and rows[0]["mood_score"] > 0:
         awards.append({"type": "cat_lover", "user_id": rows[0]["user_id"],
@@ -57,12 +57,12 @@ async def calculate_monthly_awards(chat_id: int, year: int, month: int) -> list[
                        "name": rows[0]["first_name"] or rows[0]["username"]})
 
     # 3. Duel master
-    rows = await db.execute_fetchall(
-        "SELECT winner_id, COUNT(*) as wins, u.first_name, u.username "
-        "FROM Duel d JOIN User u ON d.winner_id=u.user_id AND d.chat_id=u.chat_id "
-        "WHERE d.chat_id=? AND d.created_at >= ? AND d.created_at < ? AND d.winner_id IS NOT NULL "
-        "GROUP BY d.winner_id ORDER BY wins DESC LIMIT 1",
-        (chat_id, month_start, month_end),
+    rows = await db.fetch(
+        'SELECT winner_id, COUNT(*) as wins, u.first_name, u.username '
+        'FROM Duel d JOIN "User" u ON d.winner_id=u.user_id AND d.chat_id=u.chat_id '
+        'WHERE d.chat_id=$1 AND d.created_at >= $2 AND d.created_at < $3 AND d.winner_id IS NOT NULL '
+        'GROUP BY d.winner_id, u.first_name, u.username ORDER BY wins DESC LIMIT 1',
+        chat_id, month_start, month_end,
     )
     if rows:
         awards.append({"type": "duel_master", "user_id": rows[0]["winner_id"],
@@ -70,10 +70,10 @@ async def calculate_monthly_awards(chat_id: int, year: int, month: int) -> list[
                        "name": rows[0]["first_name"] or rows[0]["username"]})
 
     # 4. Lucky survivor
-    rows = await db.execute_fetchall(
+    rows = await db.fetch(
         "SELECT participants, loser_id FROM Roulette "
-        "WHERE chat_id=? AND created_at >= ? AND created_at < ?",
-        (chat_id, month_start, month_end),
+        "WHERE chat_id=$1 AND created_at >= $2 AND created_at < $3",
+        chat_id, month_start, month_end,
     )
     if rows:
         import json
@@ -89,9 +89,9 @@ async def calculate_monthly_awards(chat_id: int, year: int, month: int) -> list[
 
         if survival_count:
             best_uid = max(survival_count, key=survival_count.get)
-            user_row = await db.execute_fetchall(
-                "SELECT first_name, username FROM User WHERE user_id=? AND chat_id=?",
-                (best_uid, chat_id),
+            user_row = await db.fetch(
+                'SELECT first_name, username FROM "User" WHERE user_id=$1 AND chat_id=$2',
+                best_uid, chat_id,
             )
             name = user_row[0]["first_name"] if user_row else "?"
             awards.append({"type": "lucky_survivor", "user_id": best_uid,
