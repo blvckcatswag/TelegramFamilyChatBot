@@ -1,5 +1,6 @@
 from datetime import datetime, date
 from app.db.database import get_db
+from app.utils.helpers import now_kyiv
 
 
 # ──────────────────── Chat ────────────────────
@@ -508,7 +509,12 @@ async def is_user_muted(chat_id: int, user_id: int) -> bool:
     if not row:
         return False
     muted_until = datetime.fromisoformat(row[0]["muted_until"])
-    return datetime.utcnow() < muted_until
+    now = now_kyiv()
+    # Handle naive datetimes from old records
+    if muted_until.tzinfo is None:
+        from app.utils.helpers import KYIV_TZ
+        muted_until = muted_until.replace(tzinfo=KYIV_TZ)
+    return now < muted_until
 
 
 # ──────────────────── Reactions ────────────────────
@@ -566,7 +572,7 @@ async def get_clown_reactions_top(chat_id: int) -> list[dict]:
         "FROM MessageReaction mr JOIN User u ON mr.to_user_id=u.user_id AND mr.chat_id=u.chat_id "
         "WHERE mr.chat_id=? AND mr.emoji=? AND mr.created_at >= date('now', 'start of month') AND mr.to_user_id IS NOT NULL "
         "GROUP BY mr.to_user_id ORDER BY cnt DESC",
-        (chat_id, "\U0001f921"),
+        (chat_id, "🤡"),
     )
     return [dict(r) for r in rows]
 

@@ -4,6 +4,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
+from aiogram.types import BotCommand
 
 from app.config.settings import BOT_TOKEN
 from app.db.database import init_db, close_db
@@ -28,6 +29,25 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+BOT_COMMANDS = [
+    BotCommand(command="menu", description="Главное меню"),
+    BotCommand(command="help", description="Список команд"),
+    BotCommand(command="cactus", description="Полить кактус"),
+    BotCommand(command="cat", description="Покормить кота"),
+    BotCommand(command="home", description="Порядок дома"),
+    BotCommand(command="duel", description="Вызвать на дуэль"),
+    BotCommand(command="roulette", description="Русская рулетка"),
+    BotCommand(command="remind", description="Создать напоминание"),
+    BotCommand(command="reminders", description="Мои напоминания"),
+    BotCommand(command="weather", description="Погода сейчас"),
+    BotCommand(command="quote", description="Сохранить цитату (reply)"),
+    BotCommand(command="quote_random", description="Случайная цитата"),
+    BotCommand(command="mystats", description="Личная статистика"),
+    BotCommand(command="top", description="Таблица лидеров"),
+    BotCommand(command="birthdays", description="Дни рождения"),
+    BotCommand(command="status", description="Диагностика бота"),
+]
 
 
 async def main():
@@ -61,6 +81,10 @@ async def main():
     # Init database
     await init_db()
     logger.info("Database initialized.")
+
+    # Register bot commands for the input bar menu
+    await bot.set_my_commands(BOT_COMMANDS)
+    logger.info("Bot commands registered.")
 
     # Setup scheduler
     set_bot(bot)
