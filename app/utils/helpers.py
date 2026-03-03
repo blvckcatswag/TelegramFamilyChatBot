@@ -1,10 +1,19 @@
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
+
+from app.config import settings as cfg
+
+KYIV_TZ = ZoneInfo(cfg.DEFAULT_TIMEZONE)
+
+
+def now_kyiv() -> datetime:
+    return datetime.now(KYIV_TZ)
 
 
 def progress_bar(value: int, max_val: int = 100, length: int = 10) -> str:
     filled = round(length * value / max_val) if max_val else 0
     empty = length - filled
-    bar = "\u2588" * filled + "\u2591" * empty
+    bar = "█" * filled + "░" * empty
     return f"{bar} {value}%"
 
 
@@ -16,11 +25,11 @@ def mention_user(first_name: str | None, username: str | None, user_id: int) -> 
 
 
 def today_str() -> str:
-    return date.today().isoformat()
+    return now_kyiv().date().isoformat()
 
 
 def now_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return now_kyiv().isoformat()
 
 
 def parse_date(s: str) -> date | None:

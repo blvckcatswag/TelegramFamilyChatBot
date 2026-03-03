@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from app.db import repositories as repo
 from app.bot.keyboards import reminder_delete_kb, back_to_menu_kb, reminders_menu_kb
+from app.utils.helpers import KYIV_TZ, now_kyiv
 
 router = Router()
 
@@ -20,8 +21,8 @@ class ReminderForm(StatesGroup):
 async def cmd_remind(message: Message, state: FSMContext):
     await state.set_state(ReminderForm.waiting_text)
     await message.answer(
-        "\U0001f4dd <b>\u041d\u043e\u0432\u043e\u0435 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435</b>\n\n"
-        "\u041d\u0430\u043f\u0438\u0448\u0438 \u0442\u0435\u043a\u0441\u0442 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u044f:",
+        "📝 <b>Новое напоминание</b>\n\n"
+        "Напиши текст напоминания:",
         parse_mode="HTML",
     )
 
@@ -30,8 +31,8 @@ async def cmd_remind(message: Message, state: FSMContext):
 async def cb_remind_create(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ReminderForm.waiting_text)
     await callback.message.edit_text(
-        "\U0001f4dd <b>\u041d\u043e\u0432\u043e\u0435 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435</b>\n\n"
-        "\u041d\u0430\u043f\u0438\u0448\u0438 \u0442\u0435\u043a\u0441\u0442 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u044f:",
+        "📝 <b>Новое напоминание</b>\n\n"
+        "Напиши текст напоминания:",
         parse_mode="HTML",
     )
     await callback.answer()
@@ -42,10 +43,10 @@ async def process_reminder_text(message: Message, state: FSMContext):
     await state.update_data(text=message.text, chat_id=message.chat.id, user_id=message.from_user.id)
     await state.set_state(ReminderForm.waiting_time)
     await message.answer(
-        "\u23f0 \u041a\u043e\u0433\u0434\u0430 \u043d\u0430\u043f\u043e\u043c\u043d\u0438\u0442\u044c?\n\n"
-        "\u0424\u043e\u0440\u043c\u0430\u0442: <code>DD.MM.YYYY HH:MM</code>\n"
-        "\u041f\u0440\u0438\u043c\u0435\u0440: <code>25.12.2026 09:00</code>\n\n"
-        "\u0418\u043b\u0438 \u043f\u0440\u043e\u0441\u0442\u043e \u0432\u0440\u0435\u043c\u044f (\u0441\u0435\u0433\u043e\u0434\u043d\u044f): <code>18:30</code>",
+        "⏰ Когда напомнить?\n\n"
+        "Формат: <code>DD.MM.YYYY HH:MM</code>\n"
+        "Пример: <code>25.12.2026 09:00</code>\n\n"
+        "Или просто время (сегодня): <code>18:30</code>",
         parse_mode="HTML",
     )
 
@@ -59,22 +60,27 @@ async def process_reminder_time(message: Message, state: FSMContext):
     for fmt in ("%d.%m.%Y %H:%M", "%d.%m %H:%M", "%H:%M"):
         try:
             parsed = datetime.strptime(text, fmt)
+            now = now_kyiv()
             if fmt == "%H:%M":
-                now = datetime.utcnow()
-                run_at = now.replace(hour=parsed.hour, minute=parsed.minute, second=0)
+                run_at = now.replace(hour=parsed.hour, minute=parsed.minute, second=0, microsecond=0)
                 if run_at <= now:
-                    run_at = run_at.replace(day=now.day + 1)
+                    from datetime import timedelta
+                    run_at = run_at + timedelta(days=1)
             elif fmt == "%d.%m %H:%M":
-                run_at = parsed.replace(year=datetime.utcnow().year)
+                run_at = parsed.replace(year=now.year, tzinfo=KYIV_TZ)
             else:
-                run_at = parsed
+                run_at = parsed.replace(tzinfo=KYIV_TZ)
             break
         except ValueError:
             continue
 
     if not run_at:
-        await message.answer("\u274c \u041d\u0435 \u043f\u043e\u043d\u044f\u043b \u0432\u0440\u0435\u043c\u044f. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439 \u0444\u043e\u0440\u043c\u0430\u0442: DD.MM.YYYY HH:MM")
+        await message.answer("❌ Не понял время. Попробуй формат: DD.MM.YYYY HH:MM")
         return
+
+    # Ensure timezone
+    if run_at.tzinfo is None:
+        run_at = run_at.replace(tzinfo=KYIV_TZ)
 
     data = await state.get_data()
     await state.clear()
@@ -84,7 +90,7 @@ async def process_reminder_time(message: Message, state: FSMContext):
     )
 
     if reminder_id is None:
-        await message.answer("\u274c \u041b\u0438\u043c\u0438\u0442 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0439 \u0434\u043e\u0441\u0442\u0438\u0433\u043d\u0443\u0442!")
+        await message.answer("❌ Лимит напоминаний достигнут!")
         return
 
     # Schedule it
@@ -92,9 +98,9 @@ async def process_reminder_time(message: Message, state: FSMContext):
     await schedule_reminder(reminder_id, data["chat_id"], data["text"], run_at)
 
     await message.answer(
-        f"\u2705 \u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435 \u0441\u043e\u0437\u0434\u0430\u043d\u043e!\n"
-        f"\U0001f4dd {data['text']}\n"
-        f"\u23f0 {run_at.strftime('%d.%m.%Y %H:%M')}",
+        f"✅ Напоминание создано!\n"
+        f"📝 {data['text']}\n"
+        f"⏰ {run_at.strftime('%d.%m.%Y %H:%M')} (Киев)",
         reply_markup=back_to_menu_kb(),
     )
 
@@ -103,10 +109,10 @@ async def process_reminder_time(message: Message, state: FSMContext):
 async def cmd_reminders(message: Message):
     reminders = await repo.get_active_reminders(message.chat.id)
     if not reminders:
-        await message.answer("\U0001f4cb \u041d\u0435\u0442 \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0439.", reply_markup=back_to_menu_kb())
+        await message.answer("📋 Нет активных напоминаний.", reply_markup=back_to_menu_kb())
         return
     await message.answer(
-        "\U0001f4cb <b>\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0435 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u044f</b>\n\u041d\u0430\u0436\u043c\u0438 \u0434\u043b\u044f \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u044f:",
+        "📋 <b>Активные напоминания</b>\nНажми для удаления:",
         reply_markup=reminder_delete_kb(reminders), parse_mode="HTML",
     )
 
@@ -116,13 +122,13 @@ async def cb_remind_list(callback: CallbackQuery):
     reminders = await repo.get_active_reminders(callback.message.chat.id)
     if not reminders:
         await callback.message.edit_text(
-            "\U0001f4cb \u041d\u0435\u0442 \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0439.",
+            "📋 Нет активных напоминаний.",
             reply_markup=reminders_menu_kb(),
         )
         await callback.answer()
         return
     await callback.message.edit_text(
-        "\U0001f4cb <b>\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0435 \u043d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u044f</b>\n\u041d\u0430\u0436\u043c\u0438 \u0434\u043b\u044f \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u044f:",
+        "📋 <b>Активные напоминания</b>\nНажми для удаления:",
         reply_markup=reminder_delete_kb(reminders), parse_mode="HTML",
     )
     await callback.answer()
@@ -140,9 +146,9 @@ async def cb_remind_delete(callback: CallbackQuery):
     reminders = await repo.get_active_reminders(chat_id)
     if not reminders:
         await callback.message.edit_text(
-            "\u2705 \u0423\u0434\u0430\u043b\u0435\u043d\u043e! \u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0439 \u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435\u0442.",
+            "✅ Удалено! Напоминаний больше нет.",
             reply_markup=reminders_menu_kb(),
         )
     else:
         await callback.message.edit_reply_markup(reply_markup=reminder_delete_kb(reminders))
-    await callback.answer("\u2705 \u0423\u0434\u0430\u043b\u0435\u043d\u043e")
+    await callback.answer("✅ Удалено")

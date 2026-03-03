@@ -19,7 +19,6 @@ async def on_reaction(event: MessageReactionUpdated):
     if not from_user_id:
         return
 
-    # Get the latest reaction emoji
     for reaction in event.new_reaction:
         emoji = reaction.emoji if hasattr(reaction, "emoji") else str(reaction)
         await repo.save_reaction(
@@ -27,7 +26,7 @@ async def on_reaction(event: MessageReactionUpdated):
             message_id=message_id,
             from_user_id=from_user_id,
             emoji=emoji,
-            to_user_id=None,  # We can't always know the message author
+            to_user_id=None,
         )
 
 
@@ -35,20 +34,19 @@ async def on_reaction(event: MessageReactionUpdated):
 async def cmd_top_reactions(message: Message):
     top = await repo.get_top_reactions(message.chat.id, 5)
     if not top:
-        await message.answer("\U0001f44d \u041d\u0435\u0442 \u0440\u0435\u0430\u043a\u0446\u0438\u0439 \u0437\u0430 \u044d\u0442\u043e\u0442 \u043c\u0435\u0441\u044f\u0446.")
+        await message.answer("👍 Нет реакций за этот месяц.")
         return
 
-    lines = ["\U0001f44d <b>\u0422\u043e\u043f-5 \u0440\u0435\u0430\u043a\u0446\u0438\u0439 \u043c\u0435\u0441\u044f\u0446\u0430</b>\n"]
+    lines = ["👍 <b>Топ-5 реакций месяца</b>\n"]
     for i, r in enumerate(top, 1):
-        lines.append(f"{i}. {r['emoji']} \u2014 {r['cnt']} \u0440\u0430\u0437")
+        lines.append(f"{i}. {r['emoji']} — {r['cnt']} раз")
 
-    # Also show who received most reactions
     received = await repo.get_reactions_received_top(message.chat.id)
     if received:
-        lines.append("\n<b>\u041a\u0442\u043e \u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442 \u0431\u043e\u043b\u044c\u0448\u0435 \u0432\u0441\u0435\u0445:</b>")
+        lines.append("\n<b>Кто получает больше всех:</b>")
         for i, r in enumerate(received[:5], 1):
             name = r.get("first_name") or r.get("username") or "?"
-            lines.append(f"{i}. {name} \u2014 {r['cnt']} \u0440\u0435\u0430\u043a\u0446\u0438\u0439")
+            lines.append(f"{i}. {name} — {r['cnt']} реакций")
 
     await message.answer("\n".join(lines), parse_mode="HTML")
 
@@ -57,7 +55,7 @@ async def cmd_top_reactions(message: Message):
 async def cmd_my_reactions(message: Message):
     count = await repo.get_my_reactions_count(message.chat.id, message.from_user.id)
     await message.answer(
-        f"\U0001f44d <b>\u0422\u0432\u043e\u0438 \u0440\u0435\u0430\u043a\u0446\u0438\u0438</b>\n\n"
-        f"\u0422\u0432\u043e\u0438 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u044f \u043f\u043e\u043b\u0443\u0447\u0438\u043b\u0438: <b>{count}</b> \u0440\u0435\u0430\u043a\u0446\u0438\u0439",
+        f"👍 <b>Твои реакции</b>\n\n"
+        f"Твои сообщения получили: <b>{count}</b> реакций",
         parse_mode="HTML",
     )
