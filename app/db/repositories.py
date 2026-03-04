@@ -478,19 +478,23 @@ async def log_mute(chat_id: int, user_id: int, reason: str, muted_until: str) ->
 
 
 async def is_user_muted(chat_id: int, user_id: int) -> bool:
+    return await get_active_mute_until(chat_id, user_id) is not None
+
+
+async def get_active_mute_until(chat_id: int, user_id: int):
+    """Returns the active mute expiry datetime, or None if not muted."""
     db = await get_db()
     row = await db.fetchrow(
         "SELECT muted_until FROM MuteLog WHERE chat_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 1",
         chat_id, user_id,
     )
     if not row:
-        return False
+        return None
     muted_until = datetime.fromisoformat(str(row["muted_until"]))
-    now = now_kyiv()
     if muted_until.tzinfo is None:
         from app.utils.helpers import KYIV_TZ
         muted_until = muted_until.replace(tzinfo=KYIV_TZ)
-    return now < muted_until
+    return muted_until if now_kyiv() < muted_until else None
 
 
 # ──────────────────── Reactions ────────────────────

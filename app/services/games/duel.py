@@ -75,12 +75,18 @@ async def cmd_duel(message: Message, bot: Bot):
     # Parse mute minutes
     for arg in args:
         try:
-            mute_minutes = max(5, min(120, int(arg)))
+            parsed = float(arg)
+            mute_minutes = max(5, min(120, round(parsed)))
         except ValueError:
             pass
 
     if opponent and opponent.id == user_id:
         await message.answer("⚔️ Нельзя вызвать самого себя!")
+        return
+
+    bot_info = await bot.get_me()
+    if opponent and opponent.id == bot_info.id:
+        await message.answer("⚔️ Бот не принимает дуэли!")
         return
 
     if opponent and await repo.is_user_muted(chat_id, opponent.id):
@@ -178,13 +184,17 @@ async def cb_duel_accept(callback: CallbackQuery, bot: Bot):
     if await can_mute_user(bot, chat_id, loser_id):
         try:
             mute_until = now_kyiv() + timedelta(minutes=mute_minutes)
-            await bot.restrict_chat_member(
-                chat_id, loser_id,
-                permissions=ChatPermissions(can_send_messages=False),
-                until_date=mute_until,
-            )
-            await repo.log_mute(chat_id, loser_id, "duel", mute_until.isoformat())
-            result_text += f"🔇 Мут на {mute_minutes} мин."
+            existing_until = await repo.get_active_mute_until(chat_id, loser_id)
+            if existing_until and existing_until >= mute_until:
+                result_text += f"ℹ️ Мут не изменён — уже действует более длинный мут."
+            else:
+                await bot.restrict_chat_member(
+                    chat_id, loser_id,
+                    permissions=ChatPermissions(can_send_messages=False),
+                    until_date=mute_until,
+                )
+                await repo.log_mute(chat_id, loser_id, "duel", mute_until.isoformat())
+                result_text += f"🔇 Мут на {mute_minutes} мин."
         except Exception:
             result_text += "ℹ️ Мут не применён (бот не админ)."
     else:

@@ -159,13 +159,17 @@ async def cb_roulette_start(callback: CallbackQuery, bot: Bot):
     if await can_mute_user(bot, chat_id, loser_id):
         try:
             mute_until = now_kyiv() + timedelta(minutes=cfg.ROULETTE_MUTE_MINUTES)
-            await bot.restrict_chat_member(
-                chat_id, loser_id,
-                permissions=ChatPermissions(can_send_messages=False),
-                until_date=mute_until,
-            )
-            await repo.log_mute(chat_id, loser_id, "roulette", mute_until.isoformat())
-            result_text += f"\n\n🔇 {loser_name} в муте на {cfg.ROULETTE_MUTE_MINUTES} мин."
+            existing_until = await repo.get_active_mute_until(chat_id, loser_id)
+            if existing_until and existing_until >= mute_until:
+                result_text += f"\n\nℹ️ Мут не изменён — уже действует более длинный мут."
+            else:
+                await bot.restrict_chat_member(
+                    chat_id, loser_id,
+                    permissions=ChatPermissions(can_send_messages=False),
+                    until_date=mute_until,
+                )
+                await repo.log_mute(chat_id, loser_id, "roulette", mute_until.isoformat())
+                result_text += f"\n\n🔇 {loser_name} в муте на {cfg.ROULETTE_MUTE_MINUTES} мин."
         except Exception:
             result_text += f"\n\nℹ️ Мут не применён (бот не админ)."
     else:
