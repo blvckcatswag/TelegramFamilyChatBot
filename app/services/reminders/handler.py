@@ -40,7 +40,14 @@ async def cb_remind_create(callback: CallbackQuery, state: FSMContext):
 
 @router.message(ReminderForm.waiting_text)
 async def process_reminder_text(message: Message, state: FSMContext):
-    await state.update_data(text=message.text, chat_id=message.chat.id, user_id=message.from_user.id)
+    text = message.text.strip() if message.text else ""
+    if not text:
+        await message.answer("❌ Текст напоминания не может быть пустым.")
+        return
+    if len(text) > 500:
+        await message.answer(f"❌ Слишком длинный текст ({len(text)} символов). Максимум — 500.")
+        return
+    await state.update_data(text=text, chat_id=message.chat.id, user_id=message.from_user.id)
     await state.set_state(ReminderForm.waiting_time)
     await message.answer(
         "⏰ Когда напомнить?\n\n"
@@ -81,6 +88,14 @@ async def process_reminder_time(message: Message, state: FSMContext):
     # Ensure timezone
     if run_at.tzinfo is None:
         run_at = run_at.replace(tzinfo=KYIV_TZ)
+
+    if run_at <= now_kyiv():
+        await message.answer(
+            "❌ Эта дата уже прошла. Укажи дату в будущем.\n"
+            "Пример: <code>25.12.2026 09:00</code>",
+            parse_mode="HTML",
+        )
+        return
 
     data = await state.get_data()
     await state.clear()

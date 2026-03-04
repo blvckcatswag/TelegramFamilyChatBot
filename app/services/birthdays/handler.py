@@ -1,9 +1,12 @@
+import re
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 from app.db import repositories as repo
 from app.config import settings as cfg
 from app.utils.helpers import parse_date, format_birthday_date
+
+_NAME_RE = re.compile(r"^[\w\s\-'\.]{1,50}$", re.UNICODE)
 
 router = Router()
 
@@ -28,6 +31,11 @@ async def cmd_birthday_add(message: Message):
 
     name = args[1]
     date_str = args[2]
+
+    if not _NAME_RE.match(name):
+        await message.answer("❌ Некорректное имя. Только буквы, цифры, пробелы и дефисы (макс. 50 символов).")
+        return
+
     d = parse_date(date_str)
 
     if not d:
