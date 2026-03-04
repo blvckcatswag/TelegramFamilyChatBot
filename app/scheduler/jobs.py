@@ -17,8 +17,10 @@ def get_scheduler() -> AsyncIOScheduler:
     if scheduler is None:
         db_url = cfg.DATABASE_URL
         if db_url.startswith("postgresql") or db_url.startswith("postgres://"):
-            # APScheduler SQLAlchemy jobstore needs postgresql:// (not postgres://)
-            sa_url = db_url.replace("postgres://", "postgresql://", 1)
+            # APScheduler SQLAlchemy jobstore needs postgresql+psycopg2://
+            sa_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+            if sa_url.startswith("postgresql://"):
+                sa_url = sa_url.replace("postgresql://", "postgresql+psycopg2://", 1)
             jobstores = {"default": SQLAlchemyJobStore(url=sa_url)}
         else:
             jobstores = {"default": SQLAlchemyJobStore(url=f"sqlite:///{cfg.DB_PATH}")}
