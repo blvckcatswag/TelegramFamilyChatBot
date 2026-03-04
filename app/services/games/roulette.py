@@ -62,7 +62,7 @@ async def cmd_roulette(message: Message, bot: Bot):
         f"Участники: 1/{cfg.ROULETTE_MAX_PLAYERS}\n"
         f"⏳ {cfg.ROULETTE_JOIN_TIMEOUT} секунд на сбор!\n\n"
         f"1. {message.from_user.first_name}",
-        reply_markup=roulette_join_kb(0),
+        reply_markup=roulette_join_kb(),
         parse_mode="HTML",
     )
 
@@ -75,17 +75,11 @@ async def cmd_roulette(message: Message, bot: Bot):
         "creator_id": user_id,
     }
 
-    # Update keyboard with correct msg_id
-    await bot.edit_message_reply_markup(
-        chat_id, sent.message_id,
-        reply_markup=roulette_join_kb(sent.message_id),
-    )
 
-
-@router.callback_query(F.data.startswith("roulette:join:"))
+@router.callback_query(F.data == "roulette:join")
 async def cb_roulette_join(callback: CallbackQuery, bot: Bot):
-    msg_id = int(callback.data.split(":")[2])
     chat_id = callback.message.chat.id
+    msg_id = callback.message.message_id
     user_id = callback.from_user.id
 
     game = _active_roulettes.get(chat_id, {}).get(msg_id)
@@ -114,16 +108,16 @@ async def cb_roulette_join(callback: CallbackQuery, bot: Bot):
         f"Барабан на 6 позиций, 1 патрон.\n"
         f"Участники: {len(game['participants'])}/{cfg.ROULETTE_MAX_PLAYERS}\n\n"
         f"{players_list}",
-        reply_markup=roulette_join_kb(msg_id),
+        reply_markup=roulette_join_kb(),
         parse_mode="HTML",
     )
     await callback.answer("✅ Ты в игре!")
 
 
-@router.callback_query(F.data.startswith("roulette:start:"))
+@router.callback_query(F.data == "roulette:start")
 async def cb_roulette_start(callback: CallbackQuery, bot: Bot):
-    msg_id = int(callback.data.split(":")[2])
     chat_id = callback.message.chat.id
+    msg_id = callback.message.message_id
     user_id = callback.from_user.id
 
     game = _active_roulettes.get(chat_id, {}).get(msg_id)
