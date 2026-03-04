@@ -87,15 +87,15 @@ def duel_accept_kb(challenger_id: int, mute_minutes: int) -> InlineKeyboardMarku
     ])
 
 
-def roulette_join_kb(roulette_msg_id: int) -> InlineKeyboardMarkup:
+def roulette_join_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="🔫 Я участвую!",
-            callback_data=f"roulette:join:{roulette_msg_id}",
+            callback_data="roulette:join",
         )],
         [InlineKeyboardButton(
             text="🎰 Начать!",
-            callback_data=f"roulette:start:{roulette_msg_id}",
+            callback_data="roulette:start",
         )],
     ])
 
