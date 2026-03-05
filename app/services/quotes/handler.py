@@ -1,6 +1,7 @@
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
+from aiogram.exceptions import TelegramBadRequest
 from app.db import repositories as repo
 from app.bot.keyboards import quotes_menu_kb, back_to_menu_kb
 from app.utils.helpers import mention_user
@@ -87,14 +88,20 @@ async def cmd_quote_last(message: Message):
 async def cb_quote_random(callback: CallbackQuery):
     quote = await repo.get_random_quote(callback.message.chat.id)
     if not quote:
-        await callback.message.edit_text("💬 Нет цитат.", reply_markup=quotes_menu_kb())
+        try:
+            await callback.message.edit_text("💬 Нет цитат.", reply_markup=quotes_menu_kb())
+        except TelegramBadRequest:
+            pass
         await callback.answer()
         return
     author = quote.get("first_name") or quote.get("username") or "Неизвестный"
-    await callback.message.edit_text(
-        f"💬 <i>«{quote['text']}»</i>\n— {author}",
-        reply_markup=quotes_menu_kb(), parse_mode="HTML",
-    )
+    try:
+        await callback.message.edit_text(
+            f"💬 <i>«{quote['text']}»</i>\n— {author}",
+            reply_markup=quotes_menu_kb(), parse_mode="HTML",
+        )
+    except TelegramBadRequest:
+        pass
     await callback.answer()
 
 
@@ -102,7 +109,10 @@ async def cb_quote_random(callback: CallbackQuery):
 async def cb_quote_last(callback: CallbackQuery):
     quotes = await repo.get_last_quotes(callback.message.chat.id, 5)
     if not quotes:
-        await callback.message.edit_text("💬 Нет цитат.", reply_markup=quotes_menu_kb())
+        try:
+            await callback.message.edit_text("💬 Нет цитат.", reply_markup=quotes_menu_kb())
+        except TelegramBadRequest:
+            pass
         await callback.answer()
         return
 
@@ -111,7 +121,10 @@ async def cb_quote_last(callback: CallbackQuery):
         author = q.get("first_name") or q.get("username") or "?"
         lines.append(f"💬 <i>«{q['text'][:80]}»</i> — {author}")
 
-    await callback.message.edit_text("\n".join(lines), reply_markup=quotes_menu_kb(), parse_mode="HTML")
+    try:
+        await callback.message.edit_text("\n".join(lines), reply_markup=quotes_menu_kb(), parse_mode="HTML")
+    except TelegramBadRequest:
+        pass
     await callback.answer()
 
 
@@ -119,7 +132,10 @@ async def cb_quote_last(callback: CallbackQuery):
 async def cb_quote_counts(callback: CallbackQuery):
     counts = await repo.get_quote_counts(callback.message.chat.id)
     if not counts:
-        await callback.message.edit_text("💬 Нет цитат.", reply_markup=quotes_menu_kb())
+        try:
+            await callback.message.edit_text("💬 Нет цитат.", reply_markup=quotes_menu_kb())
+        except TelegramBadRequest:
+            pass
         await callback.answer()
         return
 
@@ -128,5 +144,8 @@ async def cb_quote_counts(callback: CallbackQuery):
         name = c.get("first_name") or c.get("username") or "?"
         lines.append(f"{i}. {name} — {c['cnt']} цитат")
 
-    await callback.message.edit_text("\n".join(lines), reply_markup=quotes_menu_kb(), parse_mode="HTML")
+    try:
+        await callback.message.edit_text("\n".join(lines), reply_markup=quotes_menu_kb(), parse_mode="HTML")
+    except TelegramBadRequest:
+        pass
     await callback.answer()
