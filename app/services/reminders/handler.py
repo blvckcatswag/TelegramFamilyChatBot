@@ -1,13 +1,12 @@
 from datetime import datetime
 from aiogram import Router, F, Bot
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from app.db import repositories as repo
 from app.bot.keyboards import reminder_delete_kb, back_to_menu_kb, reminders_menu_kb
-from app.utils.helpers import KYIV_TZ, now_kyiv
+from app.utils.helpers import KYIV_TZ, now_kyiv, safe_edit_text, safe_edit_reply_markup
 
 router = Router()
 
@@ -32,14 +31,12 @@ async def cmd_remind(message: Message, state: FSMContext):
 async def cb_remind_create(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await state.set_state(ReminderForm.waiting_text)
-    try:
-        await callback.message.edit_text(
-            "📝 <b>Новое напоминание</b>\n\n"
-            "Напиши текст напоминания:",
-            parse_mode="HTML",
-        )
-    except TelegramBadRequest:
-        pass
+    await safe_edit_text(
+        callback.message,
+        "📝 <b>Новое напоминание</b>\n\n"
+        "Напиши текст напоминания:",
+        parse_mode="HTML",
+    )
     await callback.answer()
 
 
@@ -140,19 +137,18 @@ async def cmd_reminders(message: Message):
 @router.callback_query(F.data == "remind:list")
 async def cb_remind_list(callback: CallbackQuery):
     reminders = await repo.get_active_reminders(callback.message.chat.id)
-    try:
-        if not reminders:
-            await callback.message.edit_text(
-                "📋 Нет активных напоминаний.",
-                reply_markup=reminders_menu_kb(),
-            )
-        else:
-            await callback.message.edit_text(
-                "📋 <b>Активные напоминания</b>\nНажми для удаления:",
-                reply_markup=reminder_delete_kb(reminders), parse_mode="HTML",
-            )
-    except TelegramBadRequest:
-        pass
+    if not reminders:
+        await safe_edit_text(
+            callback.message,
+            "📋 Нет активных напоминаний.",
+            reply_markup=reminders_menu_kb(),
+        )
+    else:
+        await safe_edit_text(
+            callback.message,
+            "📋 <b>Активные напоминания</b>\nНажми для удаления:",
+            reply_markup=reminder_delete_kb(reminders), parse_mode="HTML",
+        )
     await callback.answer()
 
 
@@ -167,10 +163,10 @@ async def cb_remind_delete(callback: CallbackQuery):
 
     reminders = await repo.get_active_reminders(chat_id)
     if not reminders:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             "✅ Удалено! Напоминаний больше нет.",
             reply_markup=reminders_menu_kb(),
         )
     else:
-        await callback.message.edit_reply_markup(reply_markup=reminder_delete_kb(reminders))
+        await safe_edit_reply_markup(callback.message, reply_markup=reminder_delete_kb(reminders))
     await callback.answer("✅ Удалено")

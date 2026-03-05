@@ -4,7 +4,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram import F
 from app.db import repositories as repo
 from app.bot.keyboards import back_to_menu_kb
-from app.utils.helpers import mention_user, now_kyiv
+from app.utils.helpers import mention_user, now_kyiv, safe_edit_text, safe_edit_reply_markup
 
 router = Router()
 
@@ -209,7 +209,7 @@ async def cb_stats_awards(callback: CallbackQuery):
     now = now_kyiv()
     awards = await repo.get_awards(callback.message.chat.id, now.year, now.month)
     text = format_awards_list(awards)
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         f"🏆 <b>Награды</b>\n{text}",
         reply_markup=back_to_menu_kb(), parse_mode="HTML",
     )

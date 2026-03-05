@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery, ChatPermissions
 from app.db import repositories as repo
 from app.config import settings as cfg
 from app.bot.keyboards import duel_accept_kb
-from app.utils.helpers import mention_user, now_kyiv
+from app.utils.helpers import mention_user, now_kyiv, safe_edit_text, safe_edit_reply_markup
 
 router = Router()
 
@@ -220,13 +220,13 @@ async def cb_duel_accept(callback: CallbackQuery, bot: Bot):
     else:
         result_text += "ℹ️ Мут не применён (проигравший — админ/владелец чата)."
 
-    await callback.message.edit_text(result_text, parse_mode="HTML")
+    await safe_edit_text(callback.message, result_text, parse_mode="HTML")
     await callback.answer()
 
 
 @router.callback_query(F.data == "game:duel")
 async def cb_duel_info(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "⚔️ <b>Дуэль</b>\n\n"
         "Используй команду:\n"
         "/duel @username [минуты]\n\n"

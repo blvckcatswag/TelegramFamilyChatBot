@@ -12,7 +12,7 @@ import aiosqlite
 from app.db.database import init_db, get_db, close_db
 from app.db import repositories as repo
 from app.config import settings as cfg
-from app.utils.helpers import progress_bar, parse_date, format_birthday_date
+from app.utils.helpers import progress_bar, parse_date, format_birthday_date, safe_edit_text, safe_edit_reply_markup
 
 
 # ──────────────────── Fixtures ────────────────────
@@ -367,3 +367,49 @@ async def test_chat_ban(setup_chat):
 
     await repo.set_chat_banned(CHAT_ID, False)
     assert await repo.is_chat_banned(CHAT_ID) is False
+
+
+# ──────────────────── 18. safe_edit_text / safe_edit_reply_markup ────────────────────
+
+@pytest.mark.asyncio
+async def test_safe_edit_text_calls_edit(setup_db):
+    """safe_edit_text forwards the call to message.edit_text."""
+    msg = AsyncMock()
+    await safe_edit_text(msg, "hello", parse_mode="HTML")
+    msg.edit_text.assert_awaited_once_with("hello", parse_mode="HTML")
+
+
+@pytest.mark.asyncio
+async def test_safe_edit_text_ignores_not_modified(setup_db):
+    """safe_edit_text silently ignores 'message is not modified' TelegramBadRequest."""
+    from aiogram.exceptions import TelegramBadRequest
+    msg = AsyncMock()
+    msg.edit_text.side_effect = TelegramBadRequest(
+        method=MagicMock(), message="Bad Request: message is not modified"
+    )
+    # Should not raise
+    await safe_edit_text(msg, "same text")
+
+
+@pytest.mark.asyncio
+async def test_safe_edit_text_reraises_other_errors(setup_db):
+    """safe_edit_text re-raises TelegramBadRequest for other error types."""
+    from aiogram.exceptions import TelegramBadRequest
+    msg = AsyncMock()
+    msg.edit_text.side_effect = TelegramBadRequest(
+        method=MagicMock(), message="Bad Request: message to edit not found"
+    )
+    with pytest.raises(TelegramBadRequest):
+        await safe_edit_text(msg, "some text")
+
+
+@pytest.mark.asyncio
+async def test_safe_edit_reply_markup_ignores_not_modified(setup_db):
+    """safe_edit_reply_markup silently ignores 'message is not modified'."""
+    from aiogram.exceptions import TelegramBadRequest
+    msg = AsyncMock()
+    msg.edit_reply_markup.side_effect = TelegramBadRequest(
+        method=MagicMock(), message="Bad Request: message is not modified"
+    )
+    # Should not raise
+    await safe_edit_reply_markup(msg, reply_markup=MagicMock())
