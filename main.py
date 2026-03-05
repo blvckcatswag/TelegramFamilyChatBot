@@ -32,10 +32,25 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 if cfg.SENTRY_DSN:
+    import re
+
+    _token_re = re.compile(r"bot\d+:[A-Za-z0-9_-]+")
+
+    def _scrub_token(event, hint):
+        """Remove bot token from all URLs in the event before sending to Sentry."""
+        raw = str(event)
+        if "api.telegram.org" in raw:
+            import json
+            event_str = _token_re.sub("bot[REDACTED]", json.dumps(event))
+            event = json.loads(event_str)
+        return event
+
     sentry_sdk.init(
         dsn=cfg.SENTRY_DSN,
-        traces_sample_rate=0.1,
+        traces_sample_rate=0,   # disable performance tracing — it logs HTTP URLs with token
         environment="production",
+        before_send=_scrub_token,
+        before_send_transaction=_scrub_token,
     )
     logger.info("Sentry initialized.")
 
