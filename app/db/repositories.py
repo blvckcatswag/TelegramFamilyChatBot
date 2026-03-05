@@ -224,6 +224,11 @@ async def update_birthday_notified(birthday_id: int, year: int) -> None:
     await db.execute("UPDATE Birthday SET notified_year=$1 WHERE id=$2", year, birthday_id)
 
 
+async def delete_birthday(birthday_id: int, chat_id: int) -> None:
+    db = await get_db()
+    await db.execute("DELETE FROM Birthday WHERE id=$1 AND chat_id=$2", birthday_id, chat_id)
+
+
 # ──────────────────── Game: Cactus ────────────────────
 
 async def get_cactus(chat_id: int, user_id: int) -> dict:

@@ -7,9 +7,10 @@ def main_menu_kb() -> InlineKeyboardMarkup:
          InlineKeyboardButton(text="📅 Напоминания", callback_data="menu:reminders")],
         [InlineKeyboardButton(text="⛅ Погода", callback_data="menu:weather"),
          InlineKeyboardButton(text="💬 Цитаты", callback_data="menu:quotes")],
-        [InlineKeyboardButton(text="📊 Статистика", callback_data="menu:stats"),
-         InlineKeyboardButton(text="ℹ️ Справка", callback_data="menu:help")],
-        [InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:settings")],
+        [InlineKeyboardButton(text="🎂 Дни рождения", callback_data="menu:birthdays"),
+         InlineKeyboardButton(text="📊 Статистика", callback_data="menu:stats")],
+        [InlineKeyboardButton(text="ℹ️ Справка", callback_data="menu:help"),
+         InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:settings")],
     ])
 
 
@@ -70,6 +71,27 @@ def settings_kb(settings: dict) -> InlineKeyboardMarkup:
         [toggle("birthdays_enabled", "Дни рождения")],
         [InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main")],
     ])
+
+
+def birthdays_menu_kb(is_owner: bool = False) -> InlineKeyboardMarkup:
+    buttons = []
+    if is_owner:
+        buttons.append([InlineKeyboardButton(text="➕ Добавить", callback_data="birthday:add")])
+    buttons.append([InlineKeyboardButton(text="📋 Список", callback_data="birthday:list")])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def birthday_delete_kb(birthdays: list[dict]) -> InlineKeyboardMarkup:
+    buttons = []
+    for b in birthdays:
+        from app.utils.helpers import format_birthday_date
+        buttons.append([InlineKeyboardButton(
+            text=f"❌ {b['name']} — {format_birthday_date(b['date'])}",
+            callback_data=f"birthday:del:{b['id']}",
+        )])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="menu:birthdays")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def back_to_menu_kb() -> InlineKeyboardMarkup:
