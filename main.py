@@ -11,7 +11,7 @@ from app.config.logging_config import setup_logging
 from app.config import settings as cfg
 from app.config.settings import BOT_TOKEN
 from app.db.database import init_db, close_db
-from app.bot.middleware import RegisterMiddleware
+from app.bot.middleware import RegisterMiddleware, SentryContextMiddleware
 from app.bot.error_handler import router as error_router
 from app.bot.handlers_core import router as core_router
 from app.services.games.cactus import router as cactus_router
@@ -68,6 +68,8 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
 
     # Register middleware
+    dp.message.middleware(SentryContextMiddleware())
+    dp.callback_query.middleware(SentryContextMiddleware())
     dp.message.middleware(RegisterMiddleware())
     dp.callback_query.middleware(RegisterMiddleware())
 

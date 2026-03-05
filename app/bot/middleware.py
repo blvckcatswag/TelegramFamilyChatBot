@@ -1,4 +1,5 @@
 from typing import Any, Awaitable, Callable, Dict
+import sentry_sdk
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Message, CallbackQuery
 from app.db import repositories as repo
@@ -36,5 +37,33 @@ class RegisterMiddleware(BaseMiddleware):
             await repo.get_or_create_user(
                 user.id, chat_id, user.username, user.first_name
             )
+
+        return await handler(event, data)
+
+
+class SentryContextMiddleware(BaseMiddleware):
+    """Set Sentry user/chat context on every update."""
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any],
+    ) -> Any:
+        user = None
+        chat = None
+
+        if isinstance(event, Message):
+            user = event.from_user
+            chat = event.chat
+        elif isinstance(event, CallbackQuery) and event.message:
+            user = event.from_user
+            chat = event.message.chat
+
+        if user:
+            sentry_sdk.set_user({"id": user.id, "username": user.username})
+        if chat:
+            sentry_sdk.set_tag("chat_id", chat.id)
+            sentry_sdk.set_tag("chat_title", chat.title or chat.full_name)
 
         return await handler(event, data)
