@@ -1,6 +1,9 @@
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import Message as AiogramMessage
+
 from app.config import settings as cfg
 
 KYIV_TZ = ZoneInfo(cfg.DEFAULT_TIMEZONE)
@@ -48,3 +51,21 @@ def format_birthday_date(d: str) -> str:
         return f"{parts[1]}.{parts[0]}"
     except (IndexError, ValueError):
         return d
+
+
+async def safe_edit_text(message: AiogramMessage, text: str, **kwargs) -> None:
+    """Edit message text, silently ignoring 'message is not modified' errors."""
+    try:
+        await message.edit_text(text, **kwargs)
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            raise
+
+
+async def safe_edit_reply_markup(message: AiogramMessage, **kwargs) -> None:
+    """Edit message reply markup, silently ignoring 'message is not modified' errors."""
+    try:
+        await message.edit_reply_markup(**kwargs)
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            raise

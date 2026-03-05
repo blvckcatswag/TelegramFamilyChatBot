@@ -6,7 +6,7 @@ from app.bot.keyboards import (
     quotes_menu_kb, stats_menu_kb, settings_kb, back_to_menu_kb,
 )
 from app.db import repositories as repo
-from app.utils.helpers import mention_user, progress_bar
+from app.utils.helpers import mention_user, progress_bar, safe_edit_text, safe_edit_reply_markup
 from app.config.settings import SUPERADMIN_ID
 
 router = Router()
@@ -158,7 +158,7 @@ async def cmd_top(message: Message):
 
 @router.callback_query(F.data == "menu:main")
 async def cb_menu_main(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "🏠 <b>Главное меню</b>\nВыбери раздел:",
         reply_markup=main_menu_kb(), parse_mode="HTML",
     )
@@ -167,7 +167,7 @@ async def cb_menu_main(callback: CallbackQuery):
 
 @router.callback_query(F.data == "menu:games")
 async def cb_menu_games(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "🎮 <b>Игры</b>\nВыбери игру:",
         reply_markup=games_menu_kb(), parse_mode="HTML",
     )
@@ -176,7 +176,7 @@ async def cb_menu_games(callback: CallbackQuery):
 
 @router.callback_query(F.data == "menu:reminders")
 async def cb_menu_reminders(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "📅 <b>Напоминания</b>",
         reply_markup=reminders_menu_kb(), parse_mode="HTML",
     )
@@ -185,7 +185,7 @@ async def cb_menu_reminders(callback: CallbackQuery):
 
 @router.callback_query(F.data == "menu:weather")
 async def cb_menu_weather(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "⛅ <b>Погода</b>",
         reply_markup=weather_menu_kb(), parse_mode="HTML",
     )
@@ -194,7 +194,7 @@ async def cb_menu_weather(callback: CallbackQuery):
 
 @router.callback_query(F.data == "menu:quotes")
 async def cb_menu_quotes(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "💬 <b>Цитаты</b>",
         reply_markup=quotes_menu_kb(), parse_mode="HTML",
     )
@@ -203,7 +203,7 @@ async def cb_menu_quotes(callback: CallbackQuery):
 
 @router.callback_query(F.data == "menu:stats")
 async def cb_menu_stats(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "📊 <b>Статистика</b>",
         reply_markup=stats_menu_kb(), parse_mode="HTML",
     )
@@ -212,7 +212,7 @@ async def cb_menu_stats(callback: CallbackQuery):
 
 @router.callback_query(F.data == "menu:help")
 async def cb_menu_help(callback: CallbackQuery):
-    await callback.message.edit_text(HELP_TEXT, reply_markup=back_to_menu_kb(), parse_mode="HTML")
+    await safe_edit_text(callback.message, HELP_TEXT, reply_markup=back_to_menu_kb(), parse_mode="HTML")
     await callback.answer()
 
 
@@ -227,7 +227,7 @@ async def cb_menu_settings(callback: CallbackQuery):
         return
 
     settings = await repo.get_settings(chat_id)
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "⚙️ <b>Настройки</b>\nНажми для переключения:",
         reply_markup=settings_kb(settings), parse_mode="HTML",
     )
@@ -250,7 +250,7 @@ async def cb_toggle_setting(callback: CallbackQuery):
     await repo.update_setting(chat_id, key, new_val)
 
     settings = await repo.get_settings(chat_id)
-    await callback.message.edit_reply_markup(reply_markup=settings_kb(settings))
+    await safe_edit_reply_markup(callback.message, reply_markup=settings_kb(settings))
     await callback.answer("✅ Изменено")
 
 
@@ -273,7 +273,7 @@ async def cb_stats_my(callback: CallbackQuery):
         f"🔫 Рулетка: выжил {roulette_survived} раз\n"
         f"👍 Реакций: {reactions_received}"
     )
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb(), parse_mode="HTML")
+    await safe_edit_text(callback.message, text, reply_markup=back_to_menu_kb(), parse_mode="HTML")
     await callback.answer()
 
 
@@ -300,5 +300,5 @@ async def cb_stats_top(callback: CallbackQuery):
         f"<b>🐈 Кот:</b>\n{fmt_list(cat_top, 'mood_score', 'очков')}\n\n"
         f"<b>⚔️ Дуэли:</b>\n{fmt_list(duel_top, 'wins', 'побед')}"
     )
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb(), parse_mode="HTML")
+    await safe_edit_text(callback.message, text, reply_markup=back_to_menu_kb(), parse_mode="HTML")
     await callback.answer()

@@ -8,6 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 from app.db import repositories as repo
 from app.config import settings as cfg
 from app.bot.keyboards import weather_menu_kb, weather_cities_delete_kb, back_to_menu_kb
+from app.utils.helpers import safe_edit_text, safe_edit_reply_markup
 
 _CITY_RE = re.compile(r"^[\w\s\-'\.]{1,50}$", re.UNICODE)
 
@@ -83,7 +84,7 @@ async def cmd_weather(message: Message):
 @router.callback_query(F.data == "weather:now")
 async def cb_weather_now(callback: CallbackQuery):
     text = await get_weather_for_chat(callback.message.chat.id)
-    await callback.message.edit_text(text, reply_markup=weather_menu_kb(), parse_mode="HTML")
+    await safe_edit_text(callback.message, text, reply_markup=weather_menu_kb(), parse_mode="HTML")
     await callback.answer()
 
 
@@ -146,7 +147,7 @@ async def cmd_weather_time(message: Message):
 @router.callback_query(F.data == "weather:add_city")
 async def cb_weather_add_city(callback: CallbackQuery, state: FSMContext):
     await state.set_state(WeatherAddCity.waiting_city)
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "🏙️ Напиши название города:",
         parse_mode="HTML",
     )
@@ -176,10 +177,10 @@ async def process_add_city(message: Message, state: FSMContext):
 async def cb_weather_del_city(callback: CallbackQuery):
     cities = await repo.get_weather_cities(callback.message.chat.id)
     if not cities:
-        await callback.message.edit_text("Нет городов.", reply_markup=weather_menu_kb())
+        await safe_edit_text(callback.message, "Нет городов.", reply_markup=weather_menu_kb())
         await callback.answer()
         return
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "🏙️ Выбери город для удаления:",
         reply_markup=weather_cities_delete_kb(cities),
     )
@@ -192,7 +193,7 @@ async def cb_weather_remove_city(callback: CallbackQuery):
     await repo.remove_weather_city(callback.message.chat.id, city)
     cities = await repo.get_weather_cities(callback.message.chat.id)
     if not cities:
-        await callback.message.edit_text("✅ Все города удалены.", reply_markup=weather_menu_kb())
+        await safe_edit_text(callback.message, "✅ Все города удалены.", reply_markup=weather_menu_kb())
     else:
-        await callback.message.edit_reply_markup(reply_markup=weather_cities_delete_kb(cities))
+        await safe_edit_reply_markup(callback.message, reply_markup=weather_cities_delete_kb(cities))
     await callback.answer(f"✅ {city} удалён")

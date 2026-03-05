@@ -4,7 +4,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from app.db import repositories as repo
 from app.config import settings as cfg
-from app.utils.helpers import today_str, progress_bar
+from app.utils.helpers import today_str, progress_bar, safe_edit_text
 from app.bot.keyboards import back_to_menu_kb
 
 router = Router()
@@ -125,7 +125,7 @@ async def cb_home(callback: CallbackQuery):
     elif order == 100:
         extra = "\n🎉 Идеальная чистота!"
 
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         f"🧹 <b>Порядок дома</b>\n\n{bar}{extra}",
         reply_markup=back_to_menu_kb(), parse_mode="HTML",
     )

@@ -7,7 +7,7 @@ from aiogram.types import Message, CallbackQuery, ChatPermissions
 from app.db import repositories as repo
 from app.config import settings as cfg
 from app.bot.keyboards import roulette_join_kb
-from app.utils.helpers import mention_user, now_kyiv
+from app.utils.helpers import mention_user, now_kyiv, safe_edit_text, safe_edit_reply_markup
 
 router = Router()
 
@@ -103,7 +103,7 @@ async def cb_roulette_join(callback: CallbackQuery, bot: Bot):
         f"{i+1}. {game['names'][uid]}" for i, uid in enumerate(game["participants"])
     )
 
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         f"🔫 <b>Русская рулетка!</b>\n\n"
         f"Барабан на 6 позиций, 1 патрон.\n"
         f"Участники: {len(game['participants'])}/{cfg.ROULETTE_MAX_PLAYERS}\n\n"
@@ -175,13 +175,13 @@ async def cb_roulette_start(callback: CallbackQuery, bot: Bot):
     else:
         result_text += f"\n\nℹ️ Мут не применён ({loser_name} — админ/владелец чата)."
 
-    await callback.message.edit_text(result_text, parse_mode="HTML")
+    await safe_edit_text(callback.message, result_text, parse_mode="HTML")
     await callback.answer()
 
 
 @router.callback_query(F.data == "game:roulette")
 async def cb_roulette_info(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "🔫 <b>Русская рулетка</b>\n\n"
         "Используй /roulette для запуска.\n"
         f"2–{cfg.ROULETTE_MAX_PLAYERS} игроков, {cfg.ROULETTE_JOIN_TIMEOUT} сек на сбор.\n"
