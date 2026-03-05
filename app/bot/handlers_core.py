@@ -8,15 +8,19 @@ from app.bot.keyboards import (
 from app.db import repositories as repo
 from app.utils.helpers import mention_user, progress_bar, safe_edit_text, safe_edit_reply_markup
 from app.config.settings import SUPERADMIN_ID
+from app.utils.reply_keyboards import kb_start
 
 router = Router()
 
 WELCOME_TEXT = (
-    "🤖 <b>Family Chat Bot</b>\n\n"
-    "Привет! Я семейный бот с играми, напоминаниями, "
-    "погодой, цитатами и многим другим!\n\n"
-    "👉 Нажми <b>Открыть меню</b> для начала.\n"
-    "📝 /help — полный список команд.\n\n"
+    "🤖 <b>Привет! Я семейный чат-бот.</b>\n\n"
+    "Выбери что делать или нажми любую кнопку выше:\n"
+    "• 📋 Меню — главное меню\n"
+    "• 🎮 Игры — мини-игры (кактус, кот, дуэль, рулетка)\n"
+    "• 📅 Напоминания — создание и управление напоминаниями\n"
+    "• 🌤️ Погода — текущая погода и рассылка\n"
+    "• 💬 Цитаты — цитатник\n"
+    "• ℹ️ Справка — полная справка по командам\n\n"
     "❗ Для полноценной работы (мут в играх) выдайте боту права администратора."
 )
 
@@ -57,7 +61,7 @@ HELP_TEXT = (
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
-    await message.answer(WELCOME_TEXT, reply_markup=main_menu_kb(), parse_mode="HTML")
+    await message.answer(WELCOME_TEXT, reply_markup=kb_start(), parse_mode="HTML")
 
 
 @router.message(Command("menu"))
