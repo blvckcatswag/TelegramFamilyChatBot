@@ -6,9 +6,13 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import BotCommand
 
+import sentry_sdk
+from app.config.logging_config import setup_logging
+from app.config import settings as cfg
 from app.config.settings import BOT_TOKEN
 from app.db.database import init_db, close_db
-from app.bot.middleware import RegisterMiddleware
+from app.bot.middleware import RegisterMiddleware, SentryContextMiddleware
+from app.bot.error_handler import router as error_router
 from app.bot.handlers_core import router as core_router
 from app.services.games.cactus import router as cactus_router
 from app.services.games.cat import router as cat_router
@@ -24,11 +28,16 @@ from app.services.awards.handler import router as awards_router
 from app.services.admin.handler import router as admin_router
 from app.scheduler.jobs import get_scheduler, set_bot, setup_cron_jobs, restore_reminders
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+setup_logging()
 logger = logging.getLogger(__name__)
+
+if cfg.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=cfg.SENTRY_DSN,
+        traces_sample_rate=0.1,
+        environment="production",
+    )
+    logger.info("Sentry initialized.")
 
 BOT_COMMANDS = [
     BotCommand(command="menu", description="Главное меню"),
@@ -59,10 +68,13 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
 
     # Register middleware
+    dp.message.middleware(SentryContextMiddleware())
+    dp.callback_query.middleware(SentryContextMiddleware())
     dp.message.middleware(RegisterMiddleware())
     dp.callback_query.middleware(RegisterMiddleware())
 
     # Include routers (order matters — admin and core first, translator last)
+    dp.include_router(error_router)
     dp.include_router(admin_router)
     dp.include_router(core_router)
     dp.include_router(cactus_router)
