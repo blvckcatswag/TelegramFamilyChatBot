@@ -90,6 +90,14 @@ async def get_or_create_user(user_id: int, chat_id: int, username: str | None = 
     return dict(row)
 
 
+async def get_user_by_username(chat_id: int, username: str) -> dict | None:
+    db = await get_db()
+    return await db.fetchrow(
+        'SELECT * FROM "User" WHERE chat_id=$1 AND LOWER(username)=LOWER($2)',
+        chat_id, username,
+    )
+
+
 async def get_user_role(user_id: int, chat_id: int) -> str:
     db = await get_db()
     row = await db.fetchrow('SELECT role FROM "User" WHERE user_id=$1 AND chat_id=$2', user_id, chat_id)
