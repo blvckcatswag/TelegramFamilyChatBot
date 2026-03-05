@@ -335,6 +335,14 @@ async def _init_postgres(db: Database):
         created_at TIMESTAMPTZ DEFAULT NOW(),
         FOREIGN KEY (chat_id) REFERENCES Chat(chat_id)
     );
+
+    CREATE TABLE IF NOT EXISTS MessageAuthor (
+        chat_id BIGINT NOT NULL,
+        message_id BIGINT NOT NULL,
+        user_id BIGINT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (chat_id, message_id)
+    );
     """)
 
 
@@ -503,5 +511,13 @@ async def _init_sqlite(db: Database):
         value TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (chat_id) REFERENCES Chat(chat_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS MessageAuthor (
+        chat_id INTEGER NOT NULL,
+        message_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (chat_id, message_id)
     );
     """)

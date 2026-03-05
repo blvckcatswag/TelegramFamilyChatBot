@@ -38,6 +38,10 @@ class RegisterMiddleware(BaseMiddleware):
                 user.id, chat_id, user.username, user.first_name
             )
 
+            # Track message authorship for reaction attribution
+            if isinstance(event, Message) and event.message_id:
+                await repo.save_message_author(chat_id, event.message_id, user.id)
+
         return await handler(event, data)
 
 

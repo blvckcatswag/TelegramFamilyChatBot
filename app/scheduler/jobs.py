@@ -223,6 +223,12 @@ async def restore_reminders():
 
 # ──────────────────── Setup all cron jobs ────────────────────
 
+async def cleanup_message_authors():
+    from app.db import repositories as repo
+    deleted = await repo.cleanup_old_message_authors()
+    logger.info(f"MessageAuthor cleanup: removed {deleted} old records")
+
+
 def setup_cron_jobs():
     s = get_scheduler()
 
@@ -239,3 +245,7 @@ def setup_cron_jobs():
 
     # Quote of the day — every day at 09:00 Kyiv
     s.add_job(quote_of_the_day, "cron", hour=9, minute=0, id="quote_of_day", replace_existing=True)
+
+    # Cleanup old MessageAuthor records (older than 30 days) — every 1st of month at 03:00 Kyiv
+    s.add_job(cleanup_message_authors, "cron", day=1, hour=3, minute=0,
+              id="cleanup_message_authors", replace_existing=True)
