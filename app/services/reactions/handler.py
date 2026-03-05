@@ -19,6 +19,8 @@ async def on_reaction(event: MessageReactionUpdated):
     if not from_user_id:
         return
 
+    to_user_id = await repo.get_message_author(chat_id, message_id)
+
     for reaction in event.new_reaction:
         emoji = reaction.emoji if hasattr(reaction, "emoji") else str(reaction)
         await repo.save_reaction(
@@ -26,7 +28,7 @@ async def on_reaction(event: MessageReactionUpdated):
             message_id=message_id,
             from_user_id=from_user_id,
             emoji=emoji,
-            to_user_id=None,
+            to_user_id=to_user_id,
         )
 
 

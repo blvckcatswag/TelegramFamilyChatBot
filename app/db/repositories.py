@@ -497,6 +497,42 @@ async def get_active_mute_until(chat_id: int, user_id: int):
     return muted_until if now_kyiv() < muted_until else None
 
 
+# ──────────────────── Message Author ────────────────────
+
+async def save_message_author(chat_id: int, message_id: int, user_id: int) -> None:
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO MessageAuthor (chat_id, message_id, user_id) VALUES ($1, $2, $3) ON CONFLICT (chat_id, message_id) DO NOTHING",
+        chat_id, message_id, user_id,
+    )
+
+
+async def get_message_author(chat_id: int, message_id: int) -> int | None:
+    db = await get_db()
+    return await db.fetchval(
+        "SELECT user_id FROM MessageAuthor WHERE chat_id=$1 AND message_id=$2",
+        chat_id, message_id,
+    )
+
+
+async def cleanup_old_message_authors() -> int:
+    """Delete MessageAuthor records older than 30 days. Returns deleted count."""
+    db = await get_db()
+    if db.is_postgres:
+        result = await db.fetchval(
+            "WITH deleted AS (DELETE FROM MessageAuthor WHERE created_at < NOW() - INTERVAL '30 days' RETURNING 1) SELECT COUNT(*) FROM deleted"
+        )
+    else:
+        count = await db.fetchval(
+            "SELECT COUNT(*) FROM MessageAuthor WHERE created_at < datetime('now', '-30 days')"
+        )
+        await db.execute(
+            "DELETE FROM MessageAuthor WHERE created_at < datetime('now', '-30 days')"
+        )
+        result = count
+    return result or 0
+
+
 # ──────────────────── Reactions ────────────────────
 
 async def save_reaction(chat_id: int, message_id: int, from_user_id: int,
