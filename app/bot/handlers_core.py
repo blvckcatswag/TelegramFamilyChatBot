@@ -246,7 +246,7 @@ async def cb_toggle_setting(callback: CallbackQuery):
 
     key = callback.data.split(":")[1]
     settings = await repo.get_settings(chat_id)
-    new_val = 0 if settings.get(key) else 1
+    new_val = not bool(settings.get(key))
     await repo.update_setting(chat_id, key, new_val)
 
     settings = await repo.get_settings(chat_id)
