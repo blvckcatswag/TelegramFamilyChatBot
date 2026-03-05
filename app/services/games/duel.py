@@ -1,6 +1,7 @@
 import random
 import asyncio
 from datetime import timedelta
+from types import SimpleNamespace
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, ChatPermissions
@@ -65,12 +66,32 @@ async def cmd_duel(message: Message, bot: Bot):
     opponent = None
     mute_minutes = cfg.DUEL_DEFAULT_MUTE_MINUTES
 
+    bot_info = await bot.get_me()
+
     if message.reply_to_message and message.reply_to_message.from_user:
         opponent = message.reply_to_message.from_user
     elif message.entities:
         for entity in message.entities:
-            if entity.type == "text_mention":
+            if entity.type == "text_mention" and entity.user:
                 opponent = entity.user
+                break
+            elif entity.type == "mention":
+                # @username mention — extract username from message text
+                username = message.text[entity.offset + 1:entity.offset + entity.length]
+                if username.lower() == bot_info.username.lower():
+                    await message.answer("⚔️ Бот не принимает дуэли!")
+                    return
+                row = await repo.get_user_by_username(chat_id, username)
+                if row:
+                    opponent = SimpleNamespace(
+                        id=row["user_id"],
+                        first_name=row["first_name"] or username,
+                        username=row["username"],
+                    )
+                else:
+                    await message.answer(f"⚔️ Пользователь @{username} не найден в этом чате.")
+                    return
+                break
 
     # Parse mute minutes
     for arg in args:
@@ -84,7 +105,6 @@ async def cmd_duel(message: Message, bot: Bot):
         await message.answer("⚔️ Нельзя вызвать самого себя!")
         return
 
-    bot_info = await bot.get_me()
     if opponent and opponent.id == bot_info.id:
         await message.answer("⚔️ Бот не принимает дуэли!")
         return
