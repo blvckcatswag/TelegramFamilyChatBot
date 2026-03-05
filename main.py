@@ -26,6 +26,7 @@ from app.services.birthdays.handler import router as birthdays_router
 from app.services.reactions.handler import router as reactions_router
 from app.services.awards.handler import router as awards_router
 from app.services.admin.handler import router as admin_router
+from app.bot.handlers.reply_keyboards import router as reply_kb_router
 from app.scheduler.jobs import get_scheduler, set_bot, setup_cron_jobs, restore_reminders
 
 setup_logging()
@@ -102,6 +103,7 @@ async def main():
     dp.include_router(birthdays_router)
     dp.include_router(reactions_router)
     dp.include_router(awards_router)
+    dp.include_router(reply_kb_router)
     # Translator must be last — it catches all text messages
     dp.include_router(translator_router)
 
