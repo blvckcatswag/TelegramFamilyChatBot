@@ -9,6 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
 SUPERADMIN_ID: int = int(os.getenv("SUPERADMIN_ID", "0"))
 OPENWEATHER_API_KEY: str = os.getenv("OPENWEATHER_API_KEY", "")
+SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
 
 # Database: PostgreSQL (production) or SQLite (local dev/tests)
 # postgresql://user:pass@host:port/dbname  OR  sqlite:///path/to/bot.db

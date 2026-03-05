@@ -6,7 +6,9 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import BotCommand
 
+import sentry_sdk
 from app.config.logging_config import setup_logging
+from app.config import settings as cfg
 from app.config.settings import BOT_TOKEN
 from app.db.database import init_db, close_db
 from app.bot.middleware import RegisterMiddleware
@@ -28,6 +30,14 @@ from app.scheduler.jobs import get_scheduler, set_bot, setup_cron_jobs, restore_
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+if cfg.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=cfg.SENTRY_DSN,
+        traces_sample_rate=0.1,
+        environment="production",
+    )
+    logger.info("Sentry initialized.")
 
 BOT_COMMANDS = [
     BotCommand(command="menu", description="Главное меню"),
