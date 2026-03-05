@@ -1,5 +1,6 @@
 from datetime import datetime
 from aiogram import Router, F, Bot
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -29,12 +30,16 @@ async def cmd_remind(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "remind:create")
 async def cb_remind_create(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
     await state.set_state(ReminderForm.waiting_text)
-    await callback.message.edit_text(
-        "📝 <b>Новое напоминание</b>\n\n"
-        "Напиши текст напоминания:",
-        parse_mode="HTML",
-    )
+    try:
+        await callback.message.edit_text(
+            "📝 <b>Новое напоминание</b>\n\n"
+            "Напиши текст напоминания:",
+            parse_mode="HTML",
+        )
+    except TelegramBadRequest:
+        pass
     await callback.answer()
 
 
@@ -135,17 +140,19 @@ async def cmd_reminders(message: Message):
 @router.callback_query(F.data == "remind:list")
 async def cb_remind_list(callback: CallbackQuery):
     reminders = await repo.get_active_reminders(callback.message.chat.id)
-    if not reminders:
-        await callback.message.edit_text(
-            "📋 Нет активных напоминаний.",
-            reply_markup=reminders_menu_kb(),
-        )
-        await callback.answer()
-        return
-    await callback.message.edit_text(
-        "📋 <b>Активные напоминания</b>\nНажми для удаления:",
-        reply_markup=reminder_delete_kb(reminders), parse_mode="HTML",
-    )
+    try:
+        if not reminders:
+            await callback.message.edit_text(
+                "📋 Нет активных напоминаний.",
+                reply_markup=reminders_menu_kb(),
+            )
+        else:
+            await callback.message.edit_text(
+                "📋 <b>Активные напоминания</b>\nНажми для удаления:",
+                reply_markup=reminder_delete_kb(reminders), parse_mode="HTML",
+            )
+    except TelegramBadRequest:
+        pass
     await callback.answer()
 
 
