@@ -30,15 +30,23 @@ async def cmd_feedback(message: Message, state: FSMContext):
     )
 
 
+def _has_content(message: Message) -> bool:
+    """Проверяет что в сообщении есть хоть какой-то контент."""
+    return bool(
+        message.text or message.photo or message.voice or
+        message.video or message.video_note or message.audio or
+        message.document or message.sticker
+    )
+
+
 @router.message(FeedbackForm.waiting_text)
 async def process_feedback(message: Message, state: FSMContext):
-    if not message.text:
-        await message.answer("❌ Только текст, пожалуйста.")
+    if not _has_content(message):
+        await message.answer("❌ Отправь текст, фото, голосовое или кружочек.")
         return
 
-    text = message.text.strip()
-    if len(text) > 2000:
-        await message.answer(f"❌ Слишком длинно ({len(text)} символов). Максимум — 2000.")
+    if message.text and len(message.text) > 2000:
+        await message.answer(f"❌ Слишком длинный текст ({len(message.text)} символов). Максимум — 2000.")
         return
 
     await state.clear()
@@ -53,16 +61,15 @@ async def process_feedback(message: Message, state: FSMContext):
     user_info = f"@{user.username}" if user.username else user.first_name
 
     try:
-        from aiogram import Bot
-        bot: Bot = message.bot
-        await bot.send_message(
+        # Сначала шлём контекст, потом пересылаем само сообщение
+        await message.bot.send_message(
             cfg.SUPERADMIN_ID,
             f"📣 <b>Фидбек от пользователя</b>\n\n"
             f"Кто: {user_info} ({user.id})\n"
-            f"Откуда: {chat_info}\n\n"
-            f"<blockquote>{text}</blockquote>",
+            f"Откуда: {chat_info}",
             parse_mode="HTML",
         )
+        await message.forward(cfg.SUPERADMIN_ID)
     except Exception:
         logger.exception("Не удалось отправить фидбек суперадмину")
 
@@ -75,7 +82,7 @@ async def process_feedback(message: Message, state: FSMContext):
 @router.message(
     F.chat.type == "private",
     F.reply_to_message,
-    F.reply_to_message.text.startswith("📣 Фидбек от пользователя"),
+    F.reply_to_message.text.regexp(r"📣 Фидбек от пользователя"),
 )
 async def superadmin_reply_to_feedback(message: Message):
     if message.from_user.id != cfg.SUPERADMIN_ID:
