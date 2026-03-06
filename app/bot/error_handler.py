@@ -30,8 +30,30 @@ async def global_error_handler(event: ErrorEvent, bot: Bot) -> None:
             try:
                 await repo.migrate_chat(old_chat_id, new_chat_id)
                 logger.info("Chat migration complete: %s -> %s", old_chat_id, new_chat_id)
+                if cfg.SUPERADMIN_ID:
+                    await bot.send_message(
+                        cfg.SUPERADMIN_ID,
+                        f"✅ <b>Автомиграция чата</b>\n\n"
+                        f"Группа была апгрейдана до супергруппы.\n"
+                        f"Старый ID: <code>{old_chat_id}</code>\n"
+                        f"Новый ID: <code>{new_chat_id}</code>\n\n"
+                        f"Все данные перенесены автоматически.",
+                        parse_mode="HTML",
+                    )
             except Exception:
                 logger.exception("Failed to migrate chat %s -> %s", old_chat_id, new_chat_id)
+                if cfg.SUPERADMIN_ID:
+                    try:
+                        await bot.send_message(
+                            cfg.SUPERADMIN_ID,
+                            f"❌ <b>Ошибка миграции чата</b>\n\n"
+                            f"Старый ID: <code>{old_chat_id}</code>\n"
+                            f"Новый ID: <code>{new_chat_id}</code>\n\n"
+                            f"Смотри Railway logs.",
+                            parse_mode="HTML",
+                        )
+                    except Exception:
+                        pass
         return
 
     tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
