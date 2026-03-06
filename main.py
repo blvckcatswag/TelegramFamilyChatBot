@@ -95,9 +95,13 @@ async def main():
     dp.callback_query.middleware(RegisterMiddleware())
 
     # Include routers (order matters — admin and core first, translator last)
+    # reply_kb_router must come before all FSM routers so that pressing a nav
+    # button while in any FSM state is intercepted here first (middleware clears
+    # the state), and never falls through to a waiting FSM handler.
     dp.include_router(error_router)
     dp.include_router(admin_router)
     dp.include_router(core_router)
+    dp.include_router(reply_kb_router)
     dp.include_router(cactus_router)
     dp.include_router(cat_router)
     dp.include_router(duel_router)
@@ -110,7 +114,6 @@ async def main():
     dp.include_router(awards_router)
     dp.include_router(feedback_router)
     dp.include_router(donate_router)
-    dp.include_router(reply_kb_router)
     # Translator must be last — it catches all text messages
     dp.include_router(translator_router)
 
