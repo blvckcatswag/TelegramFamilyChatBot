@@ -2,7 +2,9 @@ import logging
 from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware, Router, F, Bot
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import default_state
 from aiogram.types import Message
 
 
@@ -40,6 +42,9 @@ from app.utils.reply_keyboards import (
 
 router = Router()
 router.message.middleware(_DeleteTriggerMiddleware())
+# Кнопки reply-клавиатуры работают только когда нет активного FSM-состояния.
+# Это предотвращает ситуацию когда нажатая кнопка уходит как текст фидбека/напоминания/etc.
+router.message.filter(StateFilter(default_state))
 logger = logging.getLogger(__name__)
 
 # ── Navigation ──────────────────────────────────────────────────────
