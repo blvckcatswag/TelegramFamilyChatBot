@@ -2,9 +2,11 @@ import logging
 import traceback
 
 from aiogram import Bot, Router
+from aiogram.exceptions import TelegramMigrateToChat
 from aiogram.types import ErrorEvent
 
 from app.config import settings as cfg
+from app.db import repositories as repo
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -14,6 +16,24 @@ router = Router()
 async def global_error_handler(event: ErrorEvent, bot: Bot) -> None:
     """Catch all unhandled handler exceptions, log them and notify superadmin."""
     exc = event.exception
+
+    if isinstance(exc, TelegramMigrateToChat):
+        old_chat_id = None
+        update = event.update
+        if update.message:
+            old_chat_id = update.message.chat.id
+        elif update.callback_query and update.callback_query.message:
+            old_chat_id = update.callback_query.message.chat.id
+        new_chat_id = exc.migrate_to_chat_id
+        if old_chat_id and new_chat_id:
+            logger.info("Chat migrated: %s -> %s, updating DB", old_chat_id, new_chat_id)
+            try:
+                await repo.migrate_chat(old_chat_id, new_chat_id)
+                logger.info("Chat migration complete: %s -> %s", old_chat_id, new_chat_id)
+            except Exception:
+                logger.exception("Failed to migrate chat %s -> %s", old_chat_id, new_chat_id)
+        return
+
     tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
 
     logger.error("Unhandled exception:\n%s", tb)
