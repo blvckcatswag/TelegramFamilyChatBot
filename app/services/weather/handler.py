@@ -1,4 +1,3 @@
-import re
 import aiohttp
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
@@ -10,7 +9,9 @@ from app.config import settings as cfg
 from app.bot.keyboards import weather_menu_kb, weather_cities_delete_kb, back_to_menu_kb
 from app.utils.helpers import safe_edit_text, safe_edit_reply_markup
 
-_CITY_RE = re.compile(r"^[\w\s\-'\.]{1,50}$", re.UNICODE)
+
+def _is_valid_city(name: str) -> bool:
+    return bool(name) and len(name) <= 50 and '\n' not in name and '\r' not in name
 
 router = Router()
 
@@ -95,7 +96,7 @@ async def cmd_city_add(message: Message):
         await message.answer("Использование: /city_add Название города")
         return
     city = args[1].strip()
-    if "\n" in city or not _CITY_RE.match(city):
+    if "\n" in city or not _is_valid_city(city):
         await message.answer("❌ Некорректное название города. Только буквы, цифры, пробелы и дефисы (макс. 50 символов).")
         return
     ok = await repo.add_weather_city(message.chat.id, city)
@@ -156,15 +157,11 @@ async def cb_weather_add_city(callback: CallbackQuery, state: FSMContext):
 
 @router.message(WeatherAddCity.waiting_city)
 async def process_add_city(message: Message, state: FSMContext):
-    await state.clear()
-    city = message.text.strip()
-    if "\n" in city or not _CITY_RE.match(city):
-        await message.answer(
-            "❌ Некорректное название города.\n"
-            "Допустимы только буквы, цифры, пробелы и дефисы (макс. 50 символов).",
-            reply_markup=weather_menu_kb(),
-        )
+    city = message.text.strip() if message.text else ""
+    if not _is_valid_city(city):
+        await message.answer("❌ Некорректное название города (макс. 50 символов).\nПопробуй ещё раз:")
         return
+    await state.clear()
     ok = await repo.add_weather_city(message.chat.id, city)
     if ok:
         await message.answer(f"✅ Город <b>{city}</b> добавлен!", parse_mode="HTML",

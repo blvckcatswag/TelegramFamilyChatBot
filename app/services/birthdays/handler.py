@@ -1,4 +1,3 @@
-import re
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -8,7 +7,9 @@ from app.db import repositories as repo
 from app.config import settings as cfg
 from app.utils.helpers import parse_date, format_birthday_date, safe_edit_text
 
-_NAME_RE = re.compile(r"^[\w\s\-'\.]{1,50}$", re.UNICODE)
+
+def _is_valid_name(name: str) -> bool:
+    return bool(name) and len(name) <= 50 and '\n' not in name and '\r' not in name
 
 router = Router()
 
@@ -39,8 +40,8 @@ async def cmd_birthday_add(message: Message):
     name = args[1]
     date_str = args[2]
 
-    if not _NAME_RE.match(name):
-        await message.answer("❌ Некорректное имя. Только буквы, цифры, пробелы и дефисы (макс. 50 символов).")
+    if not _is_valid_name(name):
+        await message.answer("❌ Некорректное имя (макс. 50 символов).")
         return
 
     d = parse_date(date_str)
@@ -132,8 +133,8 @@ async def cb_birthday_add(callback: CallbackQuery, state: FSMContext):
 @router.message(BirthdayForm.waiting_name)
 async def process_birthday_name(message: Message, state: FSMContext):
     name = message.text.strip() if message.text else ""
-    if not _NAME_RE.match(name):
-        await message.answer("❌ Некорректное имя. Только буквы, цифры, пробелы и дефисы (макс. 50 символов).")
+    if not _is_valid_name(name):
+        await message.answer("❌ Некорректное имя (макс. 50 символов).")
         return
     await state.update_data(name=name)
     await state.set_state(BirthdayForm.waiting_date)
