@@ -2,14 +2,16 @@ import logging
 from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware, Router, F, Bot
-from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import default_state
 from aiogram.types import Message
 
 
 class _DeleteTriggerMiddleware(BaseMiddleware):
-    """Silently delete the reply-keyboard button message after handling."""
+    """Удаляет сообщение с кнопкой после обработки и сбрасывает активный FSM-флоу.
+
+    Сброс состояния нужен чтобы нажатие любой кнопки навигации прерывало
+    текущий ввод (напоминание, фидбек, донат, дни рождения и тд).
+    """
 
     async def __call__(
         self,
@@ -17,11 +19,15 @@ class _DeleteTriggerMiddleware(BaseMiddleware):
         event: Message,
         data: dict[str, Any],
     ) -> Any:
+        state: FSMContext = data.get("state")
+        if state and await state.get_state() is not None:
+            await state.clear()
+
         result = await handler(event, data)
         try:
             await event.delete()
         except Exception:
-            pass  # bot lacks delete_messages permission — ignore
+            pass
         return result
 
 
@@ -43,9 +49,6 @@ from app.utils.reply_keyboards import (
 
 router = Router()
 router.message.middleware(_DeleteTriggerMiddleware())
-# Кнопки reply-клавиатуры работают только когда нет активного FSM-состояния.
-# Это предотвращает ситуацию когда нажатая кнопка уходит как текст фидбека/напоминания/etc.
-router.message.filter(StateFilter(default_state))
 logger = logging.getLogger(__name__)
 
 # ── Navigation ──────────────────────────────────────────────────────
