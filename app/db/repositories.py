@@ -88,7 +88,7 @@ async def migrate_chat(old_chat_id: int, new_chat_id: int) -> None:
         '"User"', "WeatherCity", "Reminder", "Birthday",
         "GameCactus", "GameCat", "Duel", "Roulette",
         "Quote", "TranslatorLog", "MuteLog", "MessageAuthor",
-        "MessageReaction", "MonthlyAward",
+        "MessageReaction", "MonthlyAward", "Feedback",
     ]
     for table in child_tables:
         await db.execute(
@@ -704,3 +704,38 @@ async def get_all_awards(chat_id: int) -> list[dict]:
         'WHERE ma.chat_id=$1 ORDER BY ma.year DESC, ma.month DESC',
         chat_id,
     )
+
+
+# ──────────────────── Feedback ────────────────────
+
+async def create_feedback(user_id: int, chat_id: int, username: str | None,
+                          category: str, text: str | None) -> int:
+    db = await get_db()
+    return await db.execute(
+        "INSERT INTO Feedback (user_id, chat_id, username, category, text) "
+        "VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        user_id, chat_id, username, category, text,
+    )
+
+
+async def get_open_feedback(limit: int = 5, offset: int = 0) -> list[dict]:
+    db = await get_db()
+    return await db.fetch(
+        "SELECT * FROM Feedback WHERE status='open' ORDER BY created_at ASC LIMIT $1 OFFSET $2",
+        limit, offset,
+    )
+
+
+async def count_open_feedback() -> int:
+    db = await get_db()
+    return await db.fetchval("SELECT COUNT(*) FROM Feedback WHERE status='open'") or 0
+
+
+async def close_feedback(feedback_id: int) -> None:
+    db = await get_db()
+    await db.execute("UPDATE Feedback SET status='done' WHERE id=$1", feedback_id)
+
+
+async def get_feedback_by_id(feedback_id: int) -> dict | None:
+    db = await get_db()
+    return await db.fetchrow("SELECT * FROM Feedback WHERE id=$1", feedback_id)
