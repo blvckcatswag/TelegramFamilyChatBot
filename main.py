@@ -58,6 +58,7 @@ if cfg.SENTRY_DSN:
 BOT_COMMANDS = [
     BotCommand(command="menu", description="Главное меню"),
     BotCommand(command="help", description="Список команд"),
+    BotCommand(command="cancel", description="Отменить текущее действие"),
     BotCommand(command="cactus", description="Полить кактус"),
     BotCommand(command="cat", description="Покормить кота"),
     BotCommand(command="home", description="Порядок дома"),

@@ -1,5 +1,7 @@
 from aiogram import Router, F
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import default_state
 from aiogram.types import Message, CallbackQuery
 from app.bot.keyboards import (
     main_menu_kb, games_menu_kb, reminders_menu_kb, weather_menu_kb,
@@ -57,6 +59,17 @@ HELP_TEXT = (
     "/awards — Награды месяца\n"
     "/awards_all — Все награды"
 )
+
+
+@router.message(Command("cancel"), ~StateFilter(default_state))
+async def cmd_cancel(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("❌ Отменено.", reply_markup=kb_start(), parse_mode="HTML")
+
+
+@router.message(Command("cancel"), StateFilter(default_state))
+async def cmd_cancel_idle(message: Message):
+    await message.answer("Нечего отменять.", reply_markup=kb_start(), parse_mode="HTML")
 
 
 @router.message(Command("start"))
