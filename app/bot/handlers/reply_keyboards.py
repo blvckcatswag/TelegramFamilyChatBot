@@ -1,8 +1,27 @@
 import logging
+from typing import Any, Awaitable, Callable
 
-from aiogram import Router, F, Bot
+from aiogram import BaseMiddleware, Router, F, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
+
+
+class _DeleteTriggerMiddleware(BaseMiddleware):
+    """Silently delete the reply-keyboard button message after handling."""
+
+    async def __call__(
+        self,
+        handler: Callable[[Message, dict[str, Any]], Awaitable[Any]],
+        event: Message,
+        data: dict[str, Any],
+    ) -> Any:
+        result = await handler(event, data)
+        try:
+            await event.delete()
+        except Exception:
+            pass  # bot lacks delete_messages permission — ignore
+        return result
+
 
 from app.bot.keyboards import settings_kb, weather_cities_delete_kb
 from app.config.settings import SUPERADMIN_ID
@@ -19,6 +38,7 @@ from app.utils.reply_keyboards import (
 )
 
 router = Router()
+router.message.middleware(_DeleteTriggerMiddleware())
 logger = logging.getLogger(__name__)
 
 # ── Navigation ──────────────────────────────────────────────────────
