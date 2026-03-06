@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -11,6 +13,8 @@ from app.db import repositories as repo
 from app.utils.helpers import mention_user, progress_bar, safe_edit_text, safe_edit_reply_markup
 from app.config.settings import SUPERADMIN_ID
 from app.utils.reply_keyboards import kb_start
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -59,6 +63,19 @@ HELP_TEXT = (
     "/awards — Награды месяца\n"
     "/awards_all — Все награды"
 )
+
+
+@router.message(F.migrate_to_chat_id)
+async def on_migrate_to_chat_id(message: Message) -> None:
+    """Handle group -> supergroup migration service message sent by Telegram."""
+    old_chat_id = message.chat.id
+    new_chat_id = message.migrate_to_chat_id
+    logger.info("Received migrate_to_chat_id: %s -> %s", old_chat_id, new_chat_id)
+    try:
+        await repo.migrate_chat(old_chat_id, new_chat_id)
+        logger.info("Chat migration complete: %s -> %s", old_chat_id, new_chat_id)
+    except Exception:
+        logger.exception("Failed to migrate chat %s -> %s", old_chat_id, new_chat_id)
 
 
 @router.message(Command("cancel"), ~StateFilter(default_state))

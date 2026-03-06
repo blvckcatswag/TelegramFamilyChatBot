@@ -67,6 +67,69 @@ async def get_chat_count() -> dict:
     return {"total": total, "active": active}
 
 
+async def migrate_chat(old_chat_id: int, new_chat_id: int) -> None:
+    """Update all records from old_chat_id to new_chat_id after Telegram supergroup migration."""
+    db = await get_db()
+    old_chat = await db.fetchrow("SELECT * FROM Chat WHERE chat_id=$1", old_chat_id)
+    if not old_chat:
+        return
+
+    # Insert new Chat row preserving metadata (ignore if already exists)
+    await db.execute(
+        """INSERT INTO Chat (chat_id, title, owner_user_id, is_active, is_banned)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (chat_id) DO NOTHING""",
+        new_chat_id, old_chat["title"], old_chat["owner_user_id"],
+        old_chat["is_active"], old_chat["is_banned"],
+    )
+
+    # Migrate all child tables
+    child_tables = [
+        '"User"', "WeatherCity", "Reminder", "Birthday",
+        "GameCactus", "GameCat", "Duel", "Roulette",
+        "Quote", "TranslatorLog", "MuteLog", "MessageAuthor",
+        "MessageReaction", "MonthlyAward",
+    ]
+    for table in child_tables:
+        await db.execute(
+            f"UPDATE {table} SET chat_id=$1 WHERE chat_id=$2", new_chat_id, old_chat_id
+        )
+
+    # Copy Settings values from old to new
+    await db.execute(
+        "INSERT INTO Settings (chat_id) VALUES ($1) ON CONFLICT (chat_id) DO NOTHING",
+        new_chat_id,
+    )
+    old_settings = await db.fetchrow("SELECT * FROM Settings WHERE chat_id=$1", old_chat_id)
+    if old_settings:
+        await db.execute(
+            """UPDATE Settings SET
+               weather_enabled=$1, weather_time=$2, translator_enabled=$3,
+               games_enabled=$4, birthdays_enabled=$5, quotes_enabled=$6
+               WHERE chat_id=$7""",
+            old_settings["weather_enabled"], old_settings["weather_time"],
+            old_settings["translator_enabled"], old_settings["games_enabled"],
+            old_settings["birthdays_enabled"], old_settings["quotes_enabled"],
+            new_chat_id,
+        )
+        await db.execute("DELETE FROM Settings WHERE chat_id=$1", old_chat_id)
+
+    # Copy HomeOrder score from old to new
+    await db.execute(
+        "INSERT INTO HomeOrder (chat_id) VALUES ($1) ON CONFLICT (chat_id) DO NOTHING",
+        new_chat_id,
+    )
+    old_ho = await db.fetchrow("SELECT order_score FROM HomeOrder WHERE chat_id=$1", old_chat_id)
+    if old_ho:
+        await db.execute(
+            "UPDATE HomeOrder SET order_score=$1 WHERE chat_id=$2",
+            old_ho["order_score"], new_chat_id,
+        )
+        await db.execute("DELETE FROM HomeOrder WHERE chat_id=$1", old_chat_id)
+
+    await db.execute("DELETE FROM Chat WHERE chat_id=$1", old_chat_id)
+
+
 # ──────────────────── User ────────────────────
 
 async def get_or_create_user(user_id: int, chat_id: int, username: str | None = None,
