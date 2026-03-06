@@ -62,6 +62,9 @@ async def process_reminder_text(message: Message, state: FSMContext):
 
 @router.message(ReminderForm.waiting_time)
 async def process_reminder_time(message: Message, state: FSMContext):
+    if not message.text:
+        await message.answer("❌ Пожалуйста, отправь время текстом.\nПример: <code>25.12.2026 09:00</code>", parse_mode="HTML")
+        return
     text = message.text.strip()
     run_at = None
 
