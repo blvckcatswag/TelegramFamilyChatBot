@@ -343,6 +343,17 @@ async def _init_postgres(db: Database):
         created_at TIMESTAMPTZ DEFAULT NOW(),
         PRIMARY KEY (chat_id, message_id)
     );
+
+    CREATE TABLE IF NOT EXISTS Feedback (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL,
+        chat_id BIGINT NOT NULL,
+        username TEXT,
+        category TEXT NOT NULL,
+        text TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
     """)
 
 
@@ -519,5 +530,16 @@ async def _init_sqlite(db: Database):
         user_id INTEGER NOT NULL,
         created_at TEXT DEFAULT (datetime('now')),
         PRIMARY KEY (chat_id, message_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS Feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        chat_id INTEGER NOT NULL,
+        username TEXT,
+        category TEXT NOT NULL,
+        text TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at TEXT DEFAULT (datetime('now'))
     );
     """)
