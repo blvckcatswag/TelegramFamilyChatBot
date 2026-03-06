@@ -413,3 +413,115 @@ async def test_safe_edit_reply_markup_ignores_not_modified(setup_db):
     )
     # Should not raise
     await safe_edit_reply_markup(msg, reply_markup=MagicMock())
+
+
+# ──────────────────── 19. Feedback ────────────────────
+
+@pytest.mark.asyncio
+async def test_feedback_create_and_list(setup_chat):
+    fid = await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "bug", "Что-то сломалось")
+    assert fid is not None
+
+    total = await repo.count_open_feedback()
+    assert total == 1
+
+    items = await repo.get_open_feedback(limit=10, offset=0)
+    assert len(items) == 1
+    assert items[0]["category"] == "bug"
+    assert items[0]["text"] == "Что-то сломалось"
+
+
+@pytest.mark.asyncio
+async def test_feedback_close(setup_chat):
+    fid = await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "idea", "Идея для фичи")
+    await repo.close_feedback(fid)
+
+    total = await repo.count_open_feedback()
+    assert total == 0
+
+
+@pytest.mark.asyncio
+async def test_feedback_multiple_categories(setup_chat):
+    await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "bug", "Баг")
+    await repo.create_feedback(USER_ID_2, CHAT_ID, "user2", "idea", "Идея")
+    await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "complaint", "Жалоба")
+
+    total = await repo.count_open_feedback()
+    assert total == 3
+
+    items = await repo.get_open_feedback(limit=10, offset=0)
+    categories = {i["category"] for i in items}
+    assert categories == {"bug", "idea", "complaint"}
+
+
+@pytest.mark.asyncio
+async def test_feedback_sql_injection_safe(setup_chat):
+    """Parameterized queries должны безопасно хранить любые строки."""
+    malicious = "'; DROP TABLE Feedback; --"
+    fid = await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "bug", malicious)
+    assert fid is not None
+
+    items = await repo.get_open_feedback(limit=10, offset=0)
+    assert items[0]["text"] == malicious  # строка сохранена as-is, таблица цела
+
+
+@pytest.mark.asyncio
+async def test_feedback_xss_stored_as_plain_text(setup_chat):
+    """XSS-строки сохраняются как обычный текст — Telegram сам экранирует HTML."""
+    xss = "<script>alert('xss')</script>"
+    fid = await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "bug", xss)
+    assert fid is not None
+
+    items = await repo.get_open_feedback(limit=10, offset=0)
+    assert items[0]["text"] == xss
+
+
+@pytest.mark.asyncio
+async def test_feedback_null_text(setup_chat):
+    """Фидбек без текста (только медиа) должен сохраняться с text=None."""
+    fid = await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "bug", None)
+    assert fid is not None
+
+    items = await repo.get_open_feedback(limit=10, offset=0)
+    assert items[0]["text"] is None
+
+
+# ──────────────────── 20. FSM cancel on nav (middleware logic) ────────────────────
+
+@pytest.mark.asyncio
+async def test_delete_trigger_middleware_clears_state(setup_db):
+    """_DeleteTriggerMiddleware должен сбрасывать FSM-состояние перед вызовом хендлера."""
+    from app.bot.handlers.reply_keyboards import _DeleteTriggerMiddleware
+    from unittest.mock import AsyncMock, MagicMock
+
+    middleware = _DeleteTriggerMiddleware()
+
+    state = AsyncMock()
+    state.get_state = AsyncMock(return_value="FeedbackForm:waiting_content")
+    state.clear = AsyncMock()
+
+    handler = AsyncMock(return_value=None)
+    event = AsyncMock()
+    event.delete = AsyncMock()
+
+    data = {"state": state}
+
+    await middleware(handler, event, data)
+
+    state.clear.assert_awaited_once()
+    handler.assert_awaited_once_with(event, data)
+
+
+@pytest.mark.asyncio
+async def test_delete_trigger_middleware_no_state(setup_db):
+    """Middleware не падает если state=None (например нет хранилища)."""
+    from app.bot.handlers.reply_keyboards import _DeleteTriggerMiddleware
+
+    middleware = _DeleteTriggerMiddleware()
+    handler = AsyncMock(return_value=None)
+    event = AsyncMock()
+    event.delete = AsyncMock()
+
+    await middleware(handler, event, {"state": None})
+
+    handler.assert_awaited_once()
