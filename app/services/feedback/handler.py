@@ -1,6 +1,7 @@
 import logging
+import re
 
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -69,3 +70,52 @@ async def process_feedback(message: Message, state: FSMContext):
         "✅ Спасибо! Сообщение отправлено разработчику.",
         reply_markup=kb_start(),
     )
+
+
+@router.message(
+    F.chat.type == "private",
+    F.reply_to_message,
+    F.reply_to_message.text.startswith("📣 Фидбек от пользователя"),
+)
+async def superadmin_reply_to_feedback(message: Message):
+    if message.from_user.id != cfg.SUPERADMIN_ID:
+        return
+    if not message.text:
+        return
+
+    original = message.reply_to_message.text
+
+    user_match = re.search(r"Кто:.*?\((\d+)\)", original)
+    chat_match = re.search(r"Откуда:.*?\((-?\d+)\)", original)
+    if not user_match or not chat_match:
+        await message.answer("Не удалось распознать получателя из сообщения фидбека.")
+        return
+
+    target_user_id = int(user_match.group(1))
+    target_chat_id = int(chat_match.group(1))
+    reply_text = (
+        f"💬 <b>Ответ разработчика на твой фидбек:</b>\n\n"
+        f"{message.text}"
+    )
+
+    sent = False
+
+    # Сначала пробуем в лс пользователю
+    try:
+        await message.bot.send_message(target_user_id, reply_text, parse_mode="HTML")
+        sent = True
+        await message.answer("✅ Ответ отправлен пользователю в лс.")
+    except Exception:
+        pass
+
+    # Если лс недоступно — шлём в чат
+    if not sent:
+        try:
+            await message.bot.send_message(target_chat_id, reply_text, parse_mode="HTML")
+            sent = True
+            await message.answer("✅ Ответ отправлен в чат (лс недоступно).")
+        except Exception:
+            pass
+
+    if not sent:
+        await message.answer("❌ Не удалось доставить ответ — ни в лс, ни в чат.")
