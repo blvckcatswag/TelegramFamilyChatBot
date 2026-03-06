@@ -7,21 +7,9 @@ from app.db import repositories as repo
 from app.config import settings as cfg
 from app.utils.helpers import today_str, mention_user, now_kyiv
 from app.bot.keyboards import back_to_menu_kb
+from app.texts import CACTUS_POSITIVE, CACTUS_NEGATIVE, CACTUS_ALREADY_WATERED, GAMES_DISABLED
 
 router = Router()
-
-CACTUS_POSITIVE = [
-    "🌵 Ты полил кактус! Он подрос на 1 см!",
-    "🌵 Кактус рад водичке! +1 см!",
-    "🌵 Кактус тянется к солнцу! +1 см!",
-    "🌵 Отличный полив! Кактус вырос на 1 см!",
-]
-
-CACTUS_NEGATIVE = [
-    "🌵💥 Ой! Ты случайно укололся о кактус!",
-    "🌵🤕 Кактус отомстил за чрезмерный полив!",
-    "🌵⚠️ Кактус не в настроении...",
-]
 
 
 async def can_mute_user(bot: Bot, chat_id: int, user_id: int) -> bool:
@@ -38,14 +26,14 @@ async def play_cactus(message: Message, bot: Bot):
 
     s = await repo.get_settings(chat_id)
     if not s.get("games_enabled"):
-        await message.answer("🎮 Игры отключены в этом чате.")
+        await message.answer(GAMES_DISABLED)
         return
 
     cactus = await repo.get_cactus(chat_id, user_id)
     today = today_str()
 
     if cactus["last_play_date"] == today:
-        await message.answer("🌵 Ты уже поливал кактус сегодня! Приходи завтра.")
+        await message.answer(CACTUS_ALREADY_WATERED)
         return
 
     roll = random.random()
