@@ -32,6 +32,7 @@ from app.services.games.roulette import cmd_roulette
 from app.services.reminders.handler import cmd_remind, cmd_reminders
 from app.services.weather.handler import get_weather_for_chat, WeatherAddCity
 from app.services.awards.handler import cmd_awards
+from app.services.feedback.handler import cmd_feedback
 from app.utils.reply_keyboards import (
     kb_start, kb_menu, kb_games, kb_reminders,
     kb_weather, kb_quotes, kb_stats, kb_help,
@@ -126,6 +127,12 @@ async def handle_help_menu(message: Message):
         "ℹ️ <b>Справка</b>\n\nВыбери раздел:",
         reply_markup=kb_help(), parse_mode="HTML",
     )
+
+
+@router.message(F.text == "📣 Фидбек")
+async def handle_feedback(message: Message, state: FSMContext):
+    logger.info("Reply KB: 📣 Фидбек — user=%s", message.from_user.id)
+    await cmd_feedback(message, state)
 
 
 @router.message(F.text == "⚙️ Настройки")
