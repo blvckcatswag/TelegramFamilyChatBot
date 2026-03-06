@@ -25,7 +25,7 @@ def kb_menu() -> ReplyKeyboardMarkup:
             [_KB(text="🎮 Игры"), _KB(text="📅 Напоминания")],
             [_KB(text="🌤️ Погода"), _KB(text="💬 Цитаты")],
             [_KB(text="📊 Статистика"), _KB(text="⚙️ Настройки")],
-            [_KB(text="ℹ️ Справка")],
+            [_KB(text="ℹ️ Справка"), _KB(text="📣 Фидбек")],
             [_KB(text="◀️ На главную")],
         ],
         resize_keyboard=True,
