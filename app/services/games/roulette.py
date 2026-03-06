@@ -8,20 +8,12 @@ from app.db import repositories as repo
 from app.config import settings as cfg
 from app.bot.keyboards import roulette_join_kb
 from app.utils.helpers import mention_user, now_kyiv, safe_edit_text, safe_edit_reply_markup
+from app.texts import ROULETTE_SURVIVE, ROULETTE_DEATH
 
 router = Router()
 
 # In-memory active roulettes: {chat_id: {msg_id: {participants: [user_ids], creator_id}}}
 _active_roulettes: dict[int, dict] = {}
-
-NARRATIVES = [
-    "{name} нажимает курок... Щелчок! Выжил! 😅",
-    "{name} дрожащей рукой тянет спуск... Пусто! 😎",
-    "{name} закрывает глаза и стреляет... Выживает и идёт менять трусишки 😅",
-    "{name} смело нажимает... Пронесло! 🙏",
-]
-
-DEATH_NARRATIVE = "🔫💥 {name} нажимает курок... <b>БАНГ!</b> {name} покидает игру! 💀"
 
 
 async def can_mute_user(bot: Bot, chat_id: int, user_id: int) -> bool:
@@ -144,9 +136,9 @@ async def cb_roulette_start(callback: CallbackQuery, bot: Bot):
     for uid in order:
         name = names.get(uid, "???")
         if uid == loser_id:
-            narrative_lines.append(DEATH_NARRATIVE.format(name=name))
+            narrative_lines.append(ROULETTE_DEATH.format(name=name))
         else:
-            narrative_lines.append(random.choice(NARRATIVES).format(name=name))
+            narrative_lines.append(random.choice(ROULETTE_SURVIVE).format(name=name))
 
     # Save to DB
     await repo.create_roulette(chat_id, json.dumps(participants), loser_id)

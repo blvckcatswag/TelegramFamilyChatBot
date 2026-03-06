@@ -6,35 +6,12 @@ from app.db import repositories as repo
 from app.config import settings as cfg
 from app.utils.helpers import today_str, progress_bar, safe_edit_text
 from app.bot.keyboards import back_to_menu_kb
+from app.texts import (
+    CAT_POSITIVE, CAT_NEUTRAL, CAT_NEGATIVE, CAT_EASTER_EGG,
+    CAT_ALREADY_FED, HOME_ORDER_MIN_COMMENT, HOME_ORDER_MAX_COMMENT, GAMES_DISABLED,
+)
 
 router = Router()
-
-CAT_POSITIVE = [
-    "🐈 Кот доволен! Он мурлычет и убрал за собой. +1 порядок!",
-    "🐈 Кот съел всё и помог помыть пол! +1 порядок!",
-    "🐈 Котик счастлив! Он принёс тебе подарок. +1 порядок!",
-]
-
-CAT_NEUTRAL = [
-    "🐈 Кот посмотрел в окно. Ничего не произошло.",
-    "🐈 Кот понюхал еду и ушёл спать.",
-    "🐈 Кот игнорирует тебя. Как обычно.",
-]
-
-CAT_NEGATIVE = [
-    "🐈 Кот разозлился и перевернул миску!",
-    "🐈 Кот поцарапал диван! Беспорядок!",
-    "🐈 Кот устроил бардак на кухне!",
-]
-
-EASTER_EGG = (
-    "🐈🌵 <b>ПАСХАЛКА!</b>\n\n"
-    "Кот опрокинул кактус! Горшок разбит, земля на полу, "
-    "кот в шоке, кактус обижен!\n"
-    "💥 Порядок дома: -10!\n"
-    "🌵 Кактус: -3 см!\n"
-    "🐈 Кот: -5 очков!"
-)
 
 
 async def play_cat(message: Message, bot: Bot):
@@ -43,14 +20,14 @@ async def play_cat(message: Message, bot: Bot):
 
     s = await repo.get_settings(chat_id)
     if not s.get("games_enabled"):
-        await message.answer("🎮 Игры отключены в этом чате.")
+        await message.answer(GAMES_DISABLED)
         return
 
     cat = await repo.get_cat(chat_id, user_id)
     today = today_str()
 
     if cat["last_play_date"] == today:
-        await message.answer("🐈 Кот уже накормлен сегодня! Приходи завтра.")
+        await message.answer(CAT_ALREADY_FED)
         return
 
     # Easter egg check
@@ -62,7 +39,7 @@ async def play_cat(message: Message, bot: Bot):
         new_mood = cat["mood_score"] - 5
         await repo.update_cat(chat_id, user_id, new_mood, today)
         await repo.update_home_order(chat_id, -10)
-        await message.answer(EASTER_EGG, parse_mode="HTML")
+        await message.answer(CAT_EASTER_EGG, parse_mode="HTML")
         return
 
     roll = random.random()
@@ -106,9 +83,9 @@ async def cmd_home(message: Message):
 
     extra = ""
     if order == 0:
-        extra = "\n😩 Полный беспорядок! Помогите!"
+        extra = HOME_ORDER_MIN_COMMENT
     elif order == 100:
-        extra = "\n🎉 Идеальная чистота!"
+        extra = HOME_ORDER_MAX_COMMENT
 
     await message.answer(f"🧹 <b>Порядок дома</b>\n\n{bar}{extra}", parse_mode="HTML")
 
@@ -121,9 +98,9 @@ async def cb_home(callback: CallbackQuery):
 
     extra = ""
     if order == 0:
-        extra = "\n😩 Полный беспорядок!"
+        extra = HOME_ORDER_MIN_COMMENT
     elif order == 100:
-        extra = "\n🎉 Идеальная чистота!"
+        extra = HOME_ORDER_MAX_COMMENT
 
     await safe_edit_text(callback.message, 
         f"🧹 <b>Порядок дома</b>\n\n{bar}{extra}",

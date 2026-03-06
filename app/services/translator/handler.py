@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from app.db import repositories as repo
 from app.config import settings as cfg
+from app.texts import TRANSLATOR_RESPONSES
 
 router = Router()
 
@@ -12,19 +13,6 @@ TRIGGERS = [
     r"\bясно\b", r"\bну понятно\b", r"\bок\b", r"\bугу\b",
     r"\bпонял\b", r"\bпонятно\b", r"\bладно\b",
     r"\bокей\b", r"\bну ок\b",
-]
-
-RESPONSES = [
-    "Ясно — это когда ничего не ясно, но уже лень спрашивать 😏",
-    "«Ясно» — универсальный ответ на всё, что не понял 🤓",
-    "Переводчик: «ясно» = «я тебя не слушал, но продолжай» 🙂",
-    "Перевод: «ну понятно» = «ничего не понятно, но очень интересно» 🧐",
-    "Ага, ясно. Как в том анекдоте... 👀",
-    "«Ок» — самое длинное письмо, которое ты отправишь сегодня 📩",
-    "«Понял» — ничего он не понял 😏",
-    "Переводчик работает: «угу» = «я в телефоне, не мешай» 📱",
-    "Так «ясно» или «ясно-ясно»? Это разные вещи! 🧐",
-    "Внимание: зафиксировано очередное «ясно»! Счётчик +1 📈",
 ]
 
 
@@ -54,7 +42,7 @@ async def check_translator_trigger(message: Message):
         return
 
     await repo.log_translator(chat_id, message.from_user.id, triggered_word)
-    response = random.choice(RESPONSES)
+    response = random.choice(TRANSLATOR_RESPONSES)
     await message.reply(response)
 
 
