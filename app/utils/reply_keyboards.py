@@ -8,7 +8,6 @@ def kb_start() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [_KB(text="📋 Меню")],
-            [_KB(text="❤️"), _KB(text="📌"), _KB(text="👎"), _KB(text="⚡")],
             [_KB(text="🎮 Игры"), _KB(text="📅 Напоминания")],
             [_KB(text="🌤️ Погода"), _KB(text="💬 Цитаты")],
             [_KB(text="ℹ️ Справка")],
