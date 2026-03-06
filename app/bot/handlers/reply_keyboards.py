@@ -35,6 +35,7 @@ from app.services.reminders.handler import cmd_remind, cmd_reminders
 from app.services.weather.handler import get_weather_for_chat, WeatherAddCity
 from app.services.awards.handler import cmd_awards
 from app.services.feedback.handler import cmd_feedback
+from app.services.donate.handler import cmd_donate
 from app.utils.reply_keyboards import (
     kb_start, kb_menu, kb_games, kb_reminders,
     kb_weather, kb_quotes, kb_stats, kb_help,
@@ -138,6 +139,12 @@ async def handle_help_menu(message: Message):
 async def handle_feedback(message: Message, state: FSMContext):
     logger.info("Reply KB: 📣 Фидбек — user=%s", message.from_user.id)
     await cmd_feedback(message, state)
+
+
+@router.message(F.text == "💝 Поддержать")
+async def handle_donate(message: Message):
+    logger.info("Reply KB: 💝 Поддержать — user=%s", message.from_user.id)
+    await cmd_donate(message)
 
 
 @router.message(F.text == "⚙️ Настройки")

@@ -21,6 +21,10 @@ DB_PATH: str = os.getenv("DB_PATH", str(BASE_DIR / "bot.db"))
 DEFAULT_WEATHER_TIME: str = os.getenv("DEFAULT_WEATHER_TIME", "07:00")
 DEFAULT_TIMEZONE: str = os.getenv("DEFAULT_TIMEZONE", "Europe/Kiev")
 
+# --- Donation crypto wallets ---
+CRYPTO_USDT_TRC20: str = os.getenv("CRYPTO_USDT_TRC20", "TXAu1JRDwtoYbVVW7xm7sKoxmsB41hjByE")
+CRYPTO_TON: str = os.getenv("CRYPTO_TON", "UQA6R_p4Wcazh9yGV5_mDIzeIu9i5FHpIzspbzdpSs8QtTqW")
+
 # --- Limits ---
 MAX_WEATHER_CITIES_PER_CHAT = 5
 MAX_REMINDERS_PER_CHAT = 20
