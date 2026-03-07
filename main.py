@@ -63,6 +63,8 @@ BOT_COMMANDS = [
     BotCommand(command="cancel", description="Отменить текущее действие"),
     BotCommand(command="cactus", description="Полить кактус"),
     BotCommand(command="cat", description="Покормить кота"),
+    BotCommand(command="cat_pet", description="Погладить кота"),
+    BotCommand(command="cat_play", description="Поиграть с котом"),
     BotCommand(command="home", description="Порядок дома"),
     BotCommand(command="duel", description="Вызвать на дуэль"),
     BotCommand(command="roulette", description="Русская рулетка"),

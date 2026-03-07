@@ -40,6 +40,7 @@ def kb_games() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [_KB(text="🌵 Кактус"), _KB(text="🐈 Кот")],
+            [_KB(text="🐾 Погладить"), _KB(text="🧶 Поиграть")],
             [_KB(text="⚔️ Дуэль"), _KB(text="🔫 Рулетка")],
             [_KB(text="🧹 Порядок"), _KB(text="🏆 Топ")],
             [_KB(text="◀️ Назад")],

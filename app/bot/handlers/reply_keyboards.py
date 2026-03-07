@@ -35,7 +35,7 @@ from app.bot.keyboards import settings_kb, weather_cities_delete_kb
 from app.config.settings import SUPERADMIN_ID
 from app.db import repositories as repo
 from app.services.games.cactus import play_cactus
-from app.services.games.cat import play_cat, cmd_home
+from app.services.games.cat import play_cat, cmd_home, _do_cat_action
 from app.services.games.roulette import cmd_roulette
 from app.services.reminders.handler import cmd_remind, cmd_reminders
 from app.services.weather.handler import get_weather_for_chat, WeatherAddCity
@@ -182,6 +182,18 @@ async def handle_cactus(message: Message, bot: Bot):
 async def handle_cat(message: Message, bot: Bot):
     logger.info("Reply KB: 🐈 Кот — user=%s", message.from_user.id)
     await play_cat(message, bot)
+
+
+@router.message(F.text == "🐾 Погладить")
+async def handle_cat_pet(message: Message, bot: Bot):
+    logger.info("Reply KB: 🐾 Погладить — user=%s", message.from_user.id)
+    await _do_cat_action(message, bot, "pet")
+
+
+@router.message(F.text == "🧶 Поиграть")
+async def handle_cat_play(message: Message, bot: Bot):
+    logger.info("Reply KB: 🧶 Поиграть — user=%s", message.from_user.id)
+    await _do_cat_action(message, bot, "play")
 
 
 @router.message(F.text == "⚔️ Дуэль")
