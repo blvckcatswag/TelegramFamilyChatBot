@@ -280,25 +280,42 @@ async def handle_del_city(message: Message):
 
 # ── Quotes ──────────────────────────────────────────────────────────
 
-_QUOTE_CATEGORIES = frozenset({
-    "👑 Золотой фонд",
-    "🌚 Тёмная лошадка",
-    "🤔 Со смыслом",
-    "🗿 А чо а всмысле",
-    "🤡 Юрий Гальцев",
-})
+_QUOTE_CATEGORY_MAP = {
+    "👑 Золотой фонд": "⭐",
+    "🌚 Тёмная лошадка": "🌚",
+    "🤔 Со смыслом": "🤔",
+    "🗿 А чо а всмысле": "🗿",
+    "🤡 Юрий Гальцев": "🤡",
+}
+
+_MEDIA_LABELS = {
+    "photo": "[Фото]",
+    "voice": "[Голосовое]",
+    "video_note": "[Кружочек]",
+    "video": "[Видео]",
+    "sticker": "[Стикер]",
+    "audio": "[Аудио]",
+    "document": "[Документ]",
+}
 
 
-@router.message(F.text.in_(_QUOTE_CATEGORIES))
+@router.message(F.text.in_(set(_QUOTE_CATEGORY_MAP.keys())))
 async def handle_quote_category(message: Message):
     logger.info("Reply KB: quote category '%s' — user=%s", message.text, message.from_user.id)
-    quote = await repo.get_random_quote(message.chat.id)
+    category = _QUOTE_CATEGORY_MAP[message.text]
+    quote = await repo.get_random_quote(message.chat.id, category=category)
     if not quote:
-        await message.answer("💬 Нет сохранённых цитат.", reply_markup=kb_quotes())
+        await message.answer(f"💬 Нет цитат в разделе «{message.text}».", reply_markup=kb_quotes())
         return
+    text = quote.get("text")
+    media_type = quote.get("media_type")
+    if not text and media_type:
+        text = _MEDIA_LABELS.get(media_type, "[Медиа]")
+    elif not text:
+        text = "..."
     author = quote.get("first_name") or quote.get("username") or "Неизвестный"
     await message.answer(
-        f"💬 <i>«{quote['text']}»</i>\n— {author}",
+        f"💬 <i>«{text}»</i>\n— {author}",
         reply_markup=kb_quotes(), parse_mode="HTML",
     )
 

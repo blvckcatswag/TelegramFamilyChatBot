@@ -480,21 +480,33 @@ async def get_last_roulette_time(chat_id: int, user_id: int) -> str | None:
 # ──────────────────── Quotes ────────────────────
 
 async def save_quote(chat_id: int, author_id: int, saved_by_id: int,
-                     text: str, message_id: int | None = None) -> int | None:
+                     text: str | None, message_id: int | None = None,
+                     category: str = "⭐", media_type: str | None = None) -> int | None:
     db = await get_db()
     from app.config.settings import MAX_QUOTES_PER_CHAT
     count = await db.fetchval("SELECT COUNT(*) FROM Quote WHERE chat_id=$1", chat_id)
     if count >= MAX_QUOTES_PER_CHAT:
         return None
-    rid = await db.execute(
-        "INSERT INTO Quote (chat_id, author_id, saved_by_id, text, message_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-        chat_id, author_id, saved_by_id, text, message_id,
-    )
-    return rid
+    try:
+        rid = await db.execute(
+            "INSERT INTO Quote (chat_id, author_id, saved_by_id, text, message_id, category, media_type) "
+            "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+            chat_id, author_id, saved_by_id, text, message_id, category, media_type,
+        )
+        return rid
+    except Exception:
+        return None
 
 
-async def get_random_quote(chat_id: int) -> dict | None:
+async def get_random_quote(chat_id: int, category: str | None = None) -> dict | None:
     db = await get_db()
+    if category:
+        return await db.fetchrow(
+            'SELECT q.*, u.first_name, u.username FROM Quote q '
+            'LEFT JOIN "User" u ON q.author_id=u.user_id AND q.chat_id=u.chat_id '
+            'WHERE q.chat_id=$1 AND q.category=$2 ORDER BY RANDOM() LIMIT 1',
+            chat_id, category,
+        )
     return await db.fetchrow(
         'SELECT q.*, u.first_name, u.username FROM Quote q '
         'LEFT JOIN "User" u ON q.author_id=u.user_id AND q.chat_id=u.chat_id '
@@ -510,6 +522,23 @@ async def get_last_quotes(chat_id: int, limit: int = 5) -> list[dict]:
         'LEFT JOIN "User" u ON q.author_id=u.user_id AND q.chat_id=u.chat_id '
         'WHERE q.chat_id=$1 ORDER BY q.created_at DESC LIMIT $2',
         chat_id, limit,
+    )
+
+
+async def get_message_data(chat_id: int, message_id: int) -> dict | None:
+    """Get stored message text and author from MessageAuthor."""
+    db = await get_db()
+    return await db.fetchrow(
+        "SELECT user_id, text, media_type FROM MessageAuthor WHERE chat_id=$1 AND message_id=$2",
+        chat_id, message_id,
+    )
+
+
+async def get_quote_count_by_category(chat_id: int) -> list[dict]:
+    db = await get_db()
+    return await db.fetch(
+        "SELECT category, COUNT(*) as cnt FROM Quote WHERE chat_id=$1 GROUP BY category ORDER BY cnt DESC",
+        chat_id,
     )
 
 
@@ -575,11 +604,13 @@ async def get_active_mute_until(chat_id: int, user_id: int):
 
 # ──────────────────── Message Author ────────────────────
 
-async def save_message_author(chat_id: int, message_id: int, user_id: int) -> None:
+async def save_message_author(chat_id: int, message_id: int, user_id: int,
+                              text: str | None = None, media_type: str | None = None) -> None:
     db = await get_db()
     await db.execute(
-        "INSERT INTO MessageAuthor (chat_id, message_id, user_id) VALUES ($1, $2, $3) ON CONFLICT (chat_id, message_id) DO NOTHING",
-        chat_id, message_id, user_id,
+        "INSERT INTO MessageAuthor (chat_id, message_id, user_id, text, media_type) "
+        "VALUES ($1, $2, $3, $4, $5) ON CONFLICT (chat_id, message_id) DO NOTHING",
+        chat_id, message_id, user_id, text, media_type,
     )
 
 

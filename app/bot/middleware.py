@@ -38,9 +38,27 @@ class RegisterMiddleware(BaseMiddleware):
                 user.id, chat_id, user.username, user.first_name
             )
 
-            # Track message authorship for reaction attribution
+            # Track message authorship + text for reaction attribution & quotes
             if isinstance(event, Message) and event.message_id:
-                await repo.save_message_author(chat_id, event.message_id, user.id)
+                msg_text = event.text or event.caption or None
+                media_type = None
+                if event.photo:
+                    media_type = "photo"
+                elif event.voice:
+                    media_type = "voice"
+                elif event.video_note:
+                    media_type = "video_note"
+                elif event.video:
+                    media_type = "video"
+                elif event.sticker:
+                    media_type = "sticker"
+                elif event.audio:
+                    media_type = "audio"
+                elif event.document:
+                    media_type = "document"
+                await repo.save_message_author(
+                    chat_id, event.message_id, user.id, msg_text, media_type,
+                )
 
         return await handler(event, data)
 

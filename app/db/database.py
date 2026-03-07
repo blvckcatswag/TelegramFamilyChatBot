@@ -165,8 +165,31 @@ async def init_db(url: str | None = None) -> None:
 
     if _db.is_postgres:
         await _init_postgres(_db)
+        await _run_migrations(_db)
     else:
         await _init_sqlite(_db)
+
+
+async def _run_migrations(db: Database):
+    """Add columns to existing tables (safe to run multiple times)."""
+    migrations = [
+        "ALTER TABLE MessageAuthor ADD COLUMN IF NOT EXISTS text TEXT",
+        "ALTER TABLE MessageAuthor ADD COLUMN IF NOT EXISTS media_type VARCHAR(20)",
+        "ALTER TABLE Quote ADD COLUMN IF NOT EXISTS category VARCHAR(10) NOT NULL DEFAULT '⭐'",
+        "ALTER TABLE Quote ADD COLUMN IF NOT EXISTS media_type VARCHAR(20)",
+        "ALTER TABLE Quote ALTER COLUMN text DROP NOT NULL",
+    ]
+    for sql in migrations:
+        try:
+            await db.execute(sql)
+        except Exception:
+            pass
+    try:
+        await db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_quote_msg_cat ON Quote (chat_id, message_id, category)"
+        )
+    except Exception:
+        pass
 
 
 async def _init_postgres(db: Database):
@@ -288,11 +311,16 @@ async def _init_postgres(db: Database):
         chat_id BIGINT NOT NULL,
         author_id BIGINT NOT NULL,
         saved_by_id BIGINT NOT NULL,
-        text TEXT NOT NULL,
+        text TEXT,
         message_id BIGINT,
+        category VARCHAR(10) NOT NULL DEFAULT '⭐',
+        media_type VARCHAR(20),
         created_at TIMESTAMPTZ DEFAULT NOW(),
         FOREIGN KEY (chat_id) REFERENCES Chat(chat_id)
     );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_quote_msg_cat
+        ON Quote (chat_id, message_id, category);
 
     CREATE TABLE IF NOT EXISTS TranslatorLog (
         id SERIAL PRIMARY KEY,
@@ -340,6 +368,8 @@ async def _init_postgres(db: Database):
         chat_id BIGINT NOT NULL,
         message_id BIGINT NOT NULL,
         user_id BIGINT NOT NULL,
+        text TEXT,
+        media_type VARCHAR(20),
         created_at TIMESTAMPTZ DEFAULT NOW(),
         PRIMARY KEY (chat_id, message_id)
     );
@@ -476,10 +506,13 @@ async def _init_sqlite(db: Database):
         chat_id INTEGER NOT NULL,
         author_id INTEGER NOT NULL,
         saved_by_id INTEGER NOT NULL,
-        text TEXT NOT NULL,
+        text TEXT,
         message_id INTEGER,
+        category TEXT NOT NULL DEFAULT '⭐',
+        media_type TEXT,
         created_at TEXT DEFAULT (datetime('now')),
-        FOREIGN KEY (chat_id) REFERENCES Chat(chat_id)
+        FOREIGN KEY (chat_id) REFERENCES Chat(chat_id),
+        UNIQUE(chat_id, message_id, category)
     );
 
     CREATE TABLE IF NOT EXISTS TranslatorLog (
@@ -528,6 +561,8 @@ async def _init_sqlite(db: Database):
         chat_id INTEGER NOT NULL,
         message_id INTEGER NOT NULL,
         user_id INTEGER NOT NULL,
+        text TEXT,
+        media_type TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         PRIMARY KEY (chat_id, message_id)
     );
