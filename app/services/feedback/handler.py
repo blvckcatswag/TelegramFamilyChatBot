@@ -1,6 +1,5 @@
 import logging
 import math
-import re
 
 from aiogram import Router, F
 from aiogram.filters import Command
@@ -28,6 +27,10 @@ CATEGORIES = {
 
 class FeedbackForm(StatesGroup):
     waiting_content = State()
+
+
+class SuperadminReplyForm(StatesGroup):
+    waiting_text = State()
 
 
 def _category_kb() -> InlineKeyboardMarkup:
@@ -132,12 +135,19 @@ async def process_feedback(message: Message, state: FSMContext) -> None:
     # Уведомляем суперадмина
     if cfg.SUPERADMIN_ID:
         try:
+            reply_kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="✉️ Ответить",
+                    callback_data=f"feedback:reply:{user.id}:{chat.id}",
+                ),
+            ]])
             await message.bot.send_message(
                 cfg.SUPERADMIN_ID,
                 f"{icon} <b>{label}</b>\n\n"
                 f"Кто: {user_info} ({user.id})\n"
                 f"Откуда: {chat_info}",
                 parse_mode="HTML",
+                reply_markup=reply_kb,
             )
             await message.forward(cfg.SUPERADMIN_ID)
         except Exception:
@@ -151,46 +161,53 @@ async def process_feedback(message: Message, state: FSMContext) -> None:
 
 # ── Ответ суперадмина пользователю ──────────────────────────────────
 
-@router.message(
-    F.chat.type == "private",
-    F.reply_to_message,
-    F.reply_to_message.text.regexp(r"Кто:.*?\(\d+\)"),
-)
-async def superadmin_reply_to_feedback(message: Message) -> None:
+@router.callback_query(F.data.startswith("feedback:reply:"))
+async def cb_start_reply(callback: CallbackQuery, state: FSMContext) -> None:
+    if callback.from_user.id != cfg.SUPERADMIN_ID:
+        await callback.answer()
+        return
+
+    parts = callback.data.split(":")
+    target_user_id = int(parts[2])
+    target_chat_id = int(parts[3])
+
+    await state.set_state(SuperadminReplyForm.waiting_text)
+    await state.update_data(target_user_id=target_user_id, target_chat_id=target_chat_id)
+
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer("✏️ Напиши ответ пользователю (или /cancel для отмены):")
+    await callback.answer()
+
+
+@router.message(SuperadminReplyForm.waiting_text, F.text)
+async def process_superadmin_reply(message: Message, state: FSMContext) -> None:
     if message.from_user.id != cfg.SUPERADMIN_ID:
         return
-    if not message.text:
-        return
 
-    original = message.reply_to_message.text
-    user_match = re.search(r"Кто:.*?\((\d+)\)", original)
-    chat_match = re.search(r"Откуда:.*?\((-?\d+)\)", original)
-    if not user_match or not chat_match:
-        await message.answer("Не удалось распознать получателя.")
-        return
+    data = await state.get_data()
+    await state.clear()
 
-    target_user_id = int(user_match.group(1))
-    target_chat_id = int(chat_match.group(1))
+    target_user_id = data["target_user_id"]
+    target_chat_id = data["target_chat_id"]
     reply_text = f"💬 <b>Ответ разработчика:</b>\n\n{message.text}"
 
-    sent = False
+    # Пробуем отправить в лс
     try:
         await message.bot.send_message(target_user_id, reply_text, parse_mode="HTML")
-        sent = True
         await message.answer("✅ Ответ отправлен пользователю в лс.")
+        return
     except Exception:
-        pass
+        logger.debug("Не удалось отправить ответ в лс user_id=%s", target_user_id)
 
-    if not sent:
-        try:
-            await message.bot.send_message(target_chat_id, reply_text, parse_mode="HTML")
-            sent = True
-            await message.answer("✅ Ответ отправлен в чат (лс недоступно).")
-        except Exception:
-            pass
+    # Если лс недоступно — пробуем в чат
+    try:
+        await message.bot.send_message(target_chat_id, reply_text, parse_mode="HTML")
+        await message.answer("✅ Ответ отправлен в чат (лс недоступно).")
+        return
+    except Exception:
+        logger.debug("Не удалось отправить ответ в чат chat_id=%s", target_chat_id)
 
-    if not sent:
-        await message.answer("❌ Не удалось доставить ответ.")
+    await message.answer("❌ Не удалось доставить ответ ни в лс, ни в чат.")
 
 
 # ── Беклог (только суперадмин) ──────────────────────────────────────
