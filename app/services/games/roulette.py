@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 COLLECT_TIMEOUT = 120   # 2 minutes
 TURN_TIMEOUT = 60       # 60 seconds
-SHOOT_DELAY = 2.0       # dramatic pause
+SHOOT_DELAY = 2.0       # dramatic pause (multi-player)
+SOLO_SHOOT_DELAY = 7.0  # longer suspense for solo mode
 
 # One active game per chat
 _games: dict[int, "RouletteGame"] = {}
@@ -76,7 +77,14 @@ class RouletteGame:
 
     def cancel_task(self):
         if self._task and not self._task.done():
-            self._task.cancel()
+            # Don't cancel if we're running inside this task
+            try:
+                current = asyncio.current_task()
+            except RuntimeError:
+                current = None
+            if self._task is not current:
+                self._task.cancel()
+        self._task = None
 
 
 # ── Keyboards ─────────────────────────────────────────────────────────
@@ -258,10 +266,11 @@ async def _solo_mode(game: RouletteGame):
 
     await _edit_msg(game,
         f"🎰 <b>Соло-рулетка!</b>\n\n"
-        f"🔫 {player['name']} приставляет револьвер к виску...",
+        f"🔫 {player['name']} приставляет револьвер к виску...\n\n"
+        f"🫣 Барабан крутится...",
     )
 
-    await asyncio.sleep(SHOOT_DELAY)
+    await asyncio.sleep(SOLO_SHOOT_DELAY)
 
     hit = random.randint(1, 6) == 1
     if hit:
