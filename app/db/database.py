@@ -319,9 +319,6 @@ async def _init_postgres(db: Database):
         FOREIGN KEY (chat_id) REFERENCES Chat(chat_id)
     );
 
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_quote_msg_cat
-        ON Quote (chat_id, message_id, category);
-
     CREATE TABLE IF NOT EXISTS TranslatorLog (
         id SERIAL PRIMARY KEY,
         chat_id BIGINT NOT NULL,
