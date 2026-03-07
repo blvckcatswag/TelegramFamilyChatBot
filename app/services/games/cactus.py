@@ -5,11 +5,36 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, ChatPermissions
 from app.db import repositories as repo
 from app.config import settings as cfg
-from app.utils.helpers import today_str, mention_user, now_kyiv
-from app.bot.keyboards import back_to_menu_kb
-from app.texts import CACTUS_POSITIVE, CACTUS_NEGATIVE, CACTUS_ALREADY_WATERED, GAMES_DISABLED
+from app.utils.helpers import today_str, now_kyiv
+from app.texts import (
+    CACTUS_POSITIVE, CACTUS_NEGATIVE, GAMES_DISABLED,
+    CACTUS_OVERWATER, CACTUS_DEATH,
+)
 
 router = Router()
+
+# Overwater chance by watering number today (0-indexed: 0=first, 1=second, ...)
+# First watering is always safe, then risk grows
+OVERWATER_CHANCES = [0.0, 0.10, 0.30, 0.60, 0.85, 1.0]
+
+# Cactus growth stages
+STAGES = [
+    (0, "🌱", "Семечко"),
+    (5, "🌿", "Росток"),
+    (15, "🌵", "Маленький кактус"),
+    (30, "🏜️🌵", "Взрослый кактус"),
+    (50, "🌸🌵", "Цветущий кактус"),
+    (100, "👑🌵", "Легендарный кактус"),
+]
+
+
+def _get_stage(height: int) -> tuple[str, str]:
+    """Return (emoji, name) for cactus height."""
+    result = STAGES[0]
+    for threshold, emoji, name in STAGES:
+        if height >= threshold:
+            result = (emoji, name)
+    return result
 
 
 async def can_mute_user(bot: Bot, chat_id: int, user_id: int) -> bool:
@@ -32,20 +57,33 @@ async def play_cactus(message: Message, bot: Bot):
     cactus = await repo.get_cactus(chat_id, user_id)
     today = today_str()
 
-    if cactus["last_play_date"] == today:
-        await message.answer(CACTUS_ALREADY_WATERED)
+    # Reset daily counter if new day
+    waters_today = cactus.get("waters_today", 0) or 0
+    if cactus["last_play_date"] != today:
+        waters_today = 0
+
+    # Check overwater risk
+    chance_idx = min(waters_today, len(OVERWATER_CHANCES) - 1)
+    overwater_chance = OVERWATER_CHANCES[chance_idx]
+
+    if random.random() < overwater_chance:
+        # OVERWATERED — cactus dies!
+        old_height = cactus["height_cm"]
+        await repo.reset_cactus(chat_id, user_id)
+        death_text = random.choice(CACTUS_DEATH).format(height=old_height)
+        await message.answer(death_text)
         return
 
-    roll = random.random()
+    waters_today += 1
 
+    roll = random.random()
     if roll < cfg.CACTUS_NEGATIVE_CHANCE:
-        # Negative event
+        # Negative event (prick)
         new_height = max(0, cactus["height_cm"] - 1)
-        await repo.update_cactus(chat_id, user_id, new_height, today)
+        await repo.update_cactus(chat_id, user_id, new_height, today, waters_today)
 
         neg_text = random.choice(CACTUS_NEGATIVE)
 
-        # Try to mute
         if await can_mute_user(bot, chat_id, user_id):
             try:
                 mute_until = now_kyiv() + timedelta(minutes=cfg.CACTUS_MUTE_MINUTES)
@@ -65,10 +103,19 @@ async def play_cactus(message: Message, bot: Bot):
     else:
         # Success
         new_height = cactus["height_cm"] + 1
-        await repo.update_cactus(chat_id, user_id, new_height, today)
+        await repo.update_cactus(chat_id, user_id, new_height, today, waters_today)
 
+        stage_emoji, stage_name = _get_stage(new_height)
         pos_text = random.choice(CACTUS_POSITIVE)
-        pos_text += f"\n📏 Текущий рост: {new_height} см"
+        pos_text += f"\n{stage_emoji} {stage_name} | {new_height} см"
+
+        # Overwater warning
+        next_chance_idx = min(waters_today, len(OVERWATER_CHANCES) - 1)
+        next_chance = OVERWATER_CHANCES[next_chance_idx]
+        if next_chance > 0:
+            warning = random.choice(CACTUS_OVERWATER)
+            pos_text += f"\n\n⚠️ {warning} (шанс перелива: {int(next_chance * 100)}%)"
+
         await message.answer(pos_text)
 
 

@@ -4,7 +4,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
-from aiogram.types import BotCommand, BotCommandScopeAllGroupChats, BotCommandScopeChat
+from aiogram.types import BotCommand, BotCommandScopeChat
 
 import sentry_sdk
 from app.config.logging_config import setup_logging
@@ -121,10 +121,8 @@ async def main():
     await init_db()
     logger.info("Database initialized.")
 
-    # Register bot commands for the input bar menu (private chats only)
-    # Groups get empty commands so the "/" button doesn't appear in group input bar
+    # Register bot commands for input bar menu (all chats including groups)
     await bot.set_my_commands(BOT_COMMANDS)
-    await bot.set_my_commands([], scope=BotCommandScopeAllGroupChats())
     if cfg.SUPERADMIN_ID:
         superadmin_commands = BOT_COMMANDS + [
             BotCommand(command="backlog", description="Беклог обращений"),

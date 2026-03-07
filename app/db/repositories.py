@@ -309,11 +309,27 @@ async def get_cactus(chat_id: int, user_id: int) -> dict:
     return dict(row)
 
 
-async def update_cactus(chat_id: int, user_id: int, height_cm: int, today: str) -> None:
+async def update_cactus(chat_id: int, user_id: int, height_cm: int, today: str,
+                        waters_today: int | None = None) -> None:
+    db = await get_db()
+    if waters_today is not None:
+        await db.execute(
+            "UPDATE GameCactus SET height_cm=$1, last_play_date=$2, total_plays=total_plays+1, waters_today=$3 WHERE chat_id=$4 AND user_id=$5",
+            height_cm, today, waters_today, chat_id, user_id,
+        )
+    else:
+        await db.execute(
+            "UPDATE GameCactus SET height_cm=$1, last_play_date=$2, total_plays=total_plays+1 WHERE chat_id=$3 AND user_id=$4",
+            height_cm, today, chat_id, user_id,
+        )
+
+
+async def reset_cactus(chat_id: int, user_id: int) -> None:
+    """Kill the cactus — reset height to 0."""
     db = await get_db()
     await db.execute(
-        "UPDATE GameCactus SET height_cm=$1, last_play_date=$2, total_plays=total_plays+1 WHERE chat_id=$3 AND user_id=$4",
-        height_cm, today, chat_id, user_id,
+        "UPDATE GameCactus SET height_cm=0, waters_today=0 WHERE chat_id=$1 AND user_id=$2",
+        chat_id, user_id,
     )
 
 

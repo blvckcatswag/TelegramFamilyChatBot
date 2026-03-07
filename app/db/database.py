@@ -178,6 +178,7 @@ async def _run_migrations(db: Database):
         "ALTER TABLE Quote ADD COLUMN IF NOT EXISTS category VARCHAR(10) NOT NULL DEFAULT '⭐'",
         "ALTER TABLE Quote ADD COLUMN IF NOT EXISTS media_type VARCHAR(20)",
         "ALTER TABLE Quote ALTER COLUMN text DROP NOT NULL",
+        "ALTER TABLE GameCactus ADD COLUMN IF NOT EXISTS waters_today INTEGER DEFAULT 0",
     ]
     for sql in migrations:
         try:
@@ -264,6 +265,7 @@ async def _init_postgres(db: Database):
         height_cm INTEGER DEFAULT 0,
         last_play_date TEXT,
         total_plays INTEGER DEFAULT 0,
+        waters_today INTEGER DEFAULT 0,
         UNIQUE(chat_id, user_id),
         FOREIGN KEY (chat_id) REFERENCES Chat(chat_id)
     );
@@ -456,6 +458,7 @@ async def _init_sqlite(db: Database):
         height_cm INTEGER DEFAULT 0,
         last_play_date TEXT,
         total_plays INTEGER DEFAULT 0,
+        waters_today INTEGER DEFAULT 0,
         UNIQUE(chat_id, user_id),
         FOREIGN KEY (chat_id) REFERENCES Chat(chat_id)
     );
