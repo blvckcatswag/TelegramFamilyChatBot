@@ -109,19 +109,6 @@ def duel_accept_kb(challenger_id: int, mute_minutes: int) -> InlineKeyboardMarku
     ])
 
 
-def roulette_join_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="🔫 Я участвую!",
-            callback_data="roulette:join",
-        )],
-        [InlineKeyboardButton(
-            text="🎰 Начать!",
-            callback_data="roulette:start",
-        )],
-    ])
-
-
 def reminder_delete_kb(reminders: list[dict]) -> InlineKeyboardMarkup:
     buttons = []
     for r in reminders:
