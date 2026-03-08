@@ -308,7 +308,18 @@ async def cmd_roulette(message: Message, bot: Bot):
         return
 
     if chat_id in _games:
-        await message.answer("🔫 В этом чате уже идёт рулетка!")
+        game = _games[chat_id]
+        if game.phase == "collecting":
+            already_in = any(p["id"] == user_id for p in game.players)
+            if already_in:
+                await message.answer("🔫 Ты уже в игре, жди остальных!")
+            else:
+                await message.answer(
+                    f"🔫 Рулетка уже идёт! Игроков: {len(game.players)}. Жми и участвуй:",
+                    reply_markup=_join_kb(),
+                )
+        else:
+            await message.answer("🔫 Рулетка уже в процессе, подожди следующего раунда.")
         return
 
     last = await repo.get_last_roulette_time(chat_id, user_id)
