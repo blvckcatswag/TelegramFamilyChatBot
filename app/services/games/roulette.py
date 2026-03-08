@@ -339,7 +339,7 @@ async def cb_join(callback: CallbackQuery):
     user_id = callback.from_user.id
 
     if any(p["id"] == user_id for p in game.players):
-        await callback.answer("Ты уже в игре!")
+        await callback.answer("Ты уже в игре!", show_alert=True)
         return
 
     last = await repo.get_last_roulette_time(chat_id, user_id)
