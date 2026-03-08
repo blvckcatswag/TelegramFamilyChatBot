@@ -106,6 +106,12 @@ def _action_kb() -> InlineKeyboardMarkup:
     ]])
 
 
+def _play_again_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🔄 Сыграть ещё", callback_data="game:blackjack"),
+    ]])
+
+
 def _game_text(game: BlackjackGame, dealer_hidden: bool = True) -> str:
     pscore = _score(game.player_hand)
     if dealer_hidden:
@@ -134,7 +140,7 @@ async def _timeout_game(key: tuple[int, int]):
             BJ_TIMEOUT,
             chat_id=game.chat_id,
             message_id=game.msg_id,
-            reply_markup=None,
+            reply_markup=_play_again_kb(),
         )
     except Exception:
         pass
@@ -163,7 +169,7 @@ async def _finish(game: BlackjackGame, outcome: str, result_line: str):
     try:
         await game.bot.edit_message_text(
             text, chat_id=game.chat_id, message_id=game.msg_id,
-            reply_markup=None, parse_mode="HTML",
+            reply_markup=_play_again_kb(), parse_mode="HTML",
         )
     except Exception:
         pass
