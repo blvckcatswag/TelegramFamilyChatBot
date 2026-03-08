@@ -19,7 +19,7 @@ from app.utils.helpers import now_kyiv, KYIV_TZ
 router = Router()
 logger = logging.getLogger(__name__)
 
-COLLECT_TIMEOUT = 120   # 2 minutes
+COLLECT_TIMEOUT = 60    # 1 minute
 TURN_TIMEOUT = 60       # 60 seconds
 SHOOT_DELAY = 2.0       # dramatic pause (multi-player)
 SOLO_SHOOT_DELAY = 7.0  # longer suspense for solo mode
@@ -110,7 +110,7 @@ def _collecting_text(game: RouletteGame) -> str:
     return (
         f"🔫 <b>Русская рулетка!</b>\n\n"
         f"Барабан на 6 позиций, 1 патрон.\n"
-        f"⏳ 2 минуты на сбор!\n\n"
+        f"⏳ 1 минута на сбор!\n\n"
         f"<b>Участники ({len(game.players)}):</b>\n{plist}"
     )
 
@@ -405,7 +405,7 @@ async def cb_roulette_info(callback: CallbackQuery):
         await callback.message.edit_text(
             "🔫 <b>Русская рулетка</b>\n\n"
             "Используй /roulette для запуска.\n"
-            f"2–6 игроков, 2 минуты на сбор.\n"
+            f"2–6 игроков, 1 минута на сбор.\n"
             f"Проигравший получает мут на {cfg.ROULETTE_MUTE_MINUTES} мин.\n"
             "Соло: 1/6 шанс мута.",
             parse_mode="HTML",

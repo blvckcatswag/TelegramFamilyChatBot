@@ -2,7 +2,7 @@
 import asyncio
 import json
 import random
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,7 +12,8 @@ import aiosqlite
 from app.db.database import init_db, get_db, close_db
 from app.db import repositories as repo
 from app.config import settings as cfg
-from app.utils.helpers import progress_bar, parse_date, format_birthday_date, safe_edit_text, safe_edit_reply_markup
+from app.utils.helpers import progress_bar, parse_date, format_birthday_date, safe_edit_text, safe_edit_reply_markup, now_kyiv
+from app.services.games.roulette import RouletteGame, _check_cooldown_sync, _apply_mute
 
 
 # ──────────────────── Fixtures ────────────────────
@@ -239,6 +240,181 @@ async def test_roulette_survival_count(setup_chat):
     # User 1 lost
     survived = await repo.get_roulette_survival_count(CHAT_ID, USER_ID_1)
     assert survived == 0
+
+
+# ── RouletteGame class (pure logic, no DB/bot) ────────────────────────
+
+def test_roulette_add_player_success():
+    game = RouletteGame(CHAT_ID, 1, MagicMock())
+    assert game.add_player(USER_ID_1, "Alice") is True
+    assert game.add_player(USER_ID_2, "Bob") is True
+    assert len(game.players) == 2
+
+
+def test_roulette_add_player_duplicate():
+    game = RouletteGame(CHAT_ID, 1, MagicMock())
+    assert game.add_player(USER_ID_1, "Alice") is True
+    assert game.add_player(USER_ID_1, "Alice опять") is False
+    assert len(game.players) == 1
+
+
+def test_roulette_shoot_hits_at_bullet_pos():
+    game = RouletteGame(CHAT_ID, 1, MagicMock())
+    for i in range(1, 7):
+        game.add_player(i, f"Player{i}")
+    game.start_playing()
+    game.bullet_pos = 3
+    assert game.shoot() is False  # выстрел 1
+    assert game.shoot() is False  # выстрел 2
+    assert game.shoot() is True   # выстрел 3 — попадание
+
+
+def test_roulette_shoot_all_miss():
+    game = RouletteGame(CHAT_ID, 1, MagicMock())
+    game.add_player(USER_ID_1, "Alice")
+    game.start_playing()
+    game.bullet_pos = 7  # невозможная позиция — все мимо
+    for _ in range(6):
+        assert game.shoot() is False
+
+
+def test_roulette_bullet_always_in_range():
+    game = RouletteGame(CHAT_ID, 1, MagicMock())
+    game.add_player(USER_ID_1, "Alice")
+    for _ in range(100):
+        game.start_playing()
+        assert 1 <= game.bullet_pos <= 6
+
+
+def test_roulette_current_player_empty_order():
+    game = RouletteGame(CHAT_ID, 1, MagicMock())
+    assert game.current_player is None
+
+
+def test_roulette_current_player_wraps():
+    game = RouletteGame(CHAT_ID, 1, MagicMock())
+    game.add_player(USER_ID_1, "Alice")
+    game.add_player(USER_ID_2, "Bob")
+    game.start_playing()
+    game.order = [{"id": USER_ID_1, "name": "Alice"}, {"id": USER_ID_2, "name": "Bob"}]
+    game.current_idx = 0
+    assert game.current_player["id"] == USER_ID_1
+    game.current_idx = 2  # 2 % 2 == 0 — оборачивается
+    assert game.current_player["id"] == USER_ID_1
+    game.current_idx = 3  # 3 % 2 == 1
+    assert game.current_player["id"] == USER_ID_2
+
+
+def test_roulette_6_players_autostart():
+    game = RouletteGame(CHAT_ID, 1, MagicMock())
+    for i in range(1, 7):
+        assert game.add_player(i, f"Player{i}") is True
+    assert len(game.players) == 6
+    game.start_playing()
+    assert game.phase == "playing"
+    assert 1 <= game.bullet_pos <= 6
+    assert len(game.order) == 6
+
+
+def test_roulette_10_joins_only_6_get_in():
+    """add_player сам не ограничивает, но phase-check в handler блокирует 7+.
+    Проверяем что после autostart (6 игроков) phase меняется на playing."""
+    game = RouletteGame(CHAT_ID, 1, MagicMock())
+    for i in range(1, 7):
+        game.add_player(i, f"Player{i}")
+    game.start_playing()  # имитируем autostart
+    # игроки 7-10 в реальном боте получат "Игра уже завершена" из cb_join
+    assert game.phase == "playing"
+    assert len(game.players) == 6
+
+
+# ── Cooldown ──────────────────────────────────────────────────────────
+
+def test_roulette_cooldown_no_history():
+    assert _check_cooldown_sync(None) is None
+
+
+def test_roulette_cooldown_active():
+    last = (now_kyiv() - timedelta(minutes=2)).isoformat()
+    remaining = _check_cooldown_sync(last)
+    assert remaining is not None
+    assert remaining >= 1
+
+
+def test_roulette_cooldown_expired():
+    last = (now_kyiv() - timedelta(minutes=cfg.ROULETTE_COOLDOWN_MINUTES + 1)).isoformat()
+    assert _check_cooldown_sync(last) is None
+
+
+# ── Repository: дополнительные кейсы ─────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_roulette_last_time_none(setup_chat):
+    last = await repo.get_last_roulette_time(CHAT_ID, USER_ID_1)
+    assert last is None
+
+
+@pytest.mark.asyncio
+async def test_roulette_survival_accumulates(setup_chat):
+    participants = json.dumps([USER_ID_1, USER_ID_2])
+    await repo.create_roulette(CHAT_ID, participants, USER_ID_2)  # игра 1: user2 проиграл
+    await repo.create_roulette(CHAT_ID, participants, USER_ID_2)  # игра 2: user2 снова
+    survived = await repo.get_roulette_survival_count(CHAT_ID, USER_ID_1)
+    assert survived == 2  # user1 выжил оба раза
+
+
+@pytest.mark.asyncio
+async def test_roulette_loser_has_zero_survivals(setup_chat):
+    participants = json.dumps([USER_ID_1, USER_ID_2])
+    await repo.create_roulette(CHAT_ID, participants, USER_ID_1)
+    await repo.create_roulette(CHAT_ID, participants, USER_ID_1)
+    assert await repo.get_roulette_survival_count(CHAT_ID, USER_ID_1) == 0
+    assert await repo.get_roulette_survival_count(CHAT_ID, USER_ID_2) == 2
+
+
+# ── _apply_mute (мокаем bot) ──────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_roulette_mute_target_is_admin():
+    bot = AsyncMock()
+    member = MagicMock()
+    member.status = "administrator"
+    bot.get_chat_member.return_value = member
+
+    game = RouletteGame(CHAT_ID, 1, bot)
+    result = await _apply_mute(game, {"id": USER_ID_1, "name": "Alice"})
+
+    assert "мут не применён" in result.lower()
+    bot.restrict_chat_member.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_roulette_mute_bot_not_admin():
+    bot = AsyncMock()
+    bot.get_chat_member.side_effect = Exception("no rights")
+    bot.restrict_chat_member.side_effect = Exception("can't restrict")
+
+    game = RouletteGame(CHAT_ID, 1, bot)
+    result = await _apply_mute(game, {"id": USER_ID_1, "name": "Alice"})
+
+    assert "не применён" in result
+
+
+@pytest.mark.asyncio
+async def test_roulette_mute_success(setup_chat):
+    bot = AsyncMock()
+    member = MagicMock()
+    member.status = "member"
+    bot.get_chat_member.return_value = member
+    bot.restrict_chat_member.return_value = True
+
+    game = RouletteGame(CHAT_ID, 1, bot)
+    with patch("app.services.games.roulette.repo.get_active_mute_until", return_value=None), \
+         patch("app.services.games.roulette.repo.log_mute", return_value=None):
+        result = await _apply_mute(game, {"id": USER_ID_1, "name": "Alice"})
+
+    assert "мут" in result
+    assert str(cfg.ROULETTE_MUTE_MINUTES) in result
 
 
 # ──────────────────── 10. Birthdays ────────────────────
