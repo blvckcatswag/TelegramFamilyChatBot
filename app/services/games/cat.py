@@ -16,6 +16,9 @@ from app.texts import (
 
 router = Router()
 
+# Track last bot message per user to edit instead of sending new (command path)
+_last_cat_msg: dict[tuple[int, int], int] = {}
+
 
 def _affinity_bar(affinity: int) -> str:
     """Visual bar for affinity level."""
@@ -37,21 +40,16 @@ async def _check_games_enabled(chat_id: int) -> bool:
     return bool(s.get("games_enabled"))
 
 
-async def _do_cat_action(message: Message, bot: Bot, action: str):
-    """Unified handler for feed/pet/play actions."""
-    chat_id = message.chat.id
-    user_id = message.from_user.id
-
+async def _build_cat_response(chat_id: int, user_id: int, bot: Bot, action: str) -> str:
+    """Compute cat action result, update DB, return text to display."""
     if not await _check_games_enabled(chat_id):
-        await message.answer(GAMES_DISABLED)
-        return
+        return GAMES_DISABLED
 
     cat = await repo.get_cat(chat_id, user_id)
     today = today_str()
     affinity = cat.get("affinity", 25) or 25
     actions_today = cat.get("actions_today", 0) or 0
 
-    # Check cooldown per action type
     cooldown_field = {
         "feed": "last_feed_date",
         "pet": "last_pet_date",
@@ -59,11 +57,8 @@ async def _do_cat_action(message: Message, bot: Bot, action: str):
     }[action]
 
     if cat.get(cooldown_field) == today:
-        cooldown_text = {"feed": CAT_FEED_COOLDOWN, "pet": CAT_PET_COOLDOWN, "play": CAT_PLAY_COOLDOWN}[action]
-        await message.answer(cooldown_text)
-        return
+        return {"feed": CAT_FEED_COOLDOWN, "pet": CAT_PET_COOLDOWN, "play": CAT_PLAY_COOLDOWN}[action]
 
-    # Reset actions_today if new day
     if cat["last_play_date"] != today:
         actions_today = 0
 
@@ -80,15 +75,13 @@ async def _do_cat_action(message: Message, bot: Bot, action: str):
                               affinity=new_affinity, action_field=cooldown_field,
                               actions_today=actions_today)
         await repo.update_home_order(chat_id, -10)
-        await message.answer(CAT_EASTER_EGG, parse_mode="HTML")
-        return
+        return CAT_EASTER_EGG
 
     # Low affinity negative events (<19%)
     if affinity < 19 and random.random() < 0.35:
         event = random.choice(CAT_LOW_AFFINITY_EVENTS)
         new_mood = cat["mood_score"] - 2
 
-        # Special: cat knocks over cactus
         if "кактус" in event.lower():
             await repo.reset_cactus(chat_id, user_id)
 
@@ -99,19 +92,16 @@ async def _do_cat_action(message: Message, bot: Bot, action: str):
                               actions_today=actions_today)
         text = f"{event}\n🏠 Порядок: -{delta} ({progress_bar(new_order)})"
         text += f"\n❤️ Привязанность: {_affinity_bar(affinity)}"
-        await message.answer(text)
-        return
+        return text
 
     # Affinity bonus: higher affinity = better outcomes
-    affinity_bonus = affinity / 100  # 0.0 to 1.0
+    affinity_bonus = affinity / 100
     positive_chance = cfg.CAT_POSITIVE_CHANCE + (affinity_bonus * 0.15)
     negative_chance = max(0.05, cfg.CAT_NEGATIVE_CHANCE - (affinity_bonus * 0.15))
 
-    # Affinity change per action
     affinity_gain = {"feed": 2, "pet": 3, "play": 2}[action]
     new_affinity = min(100, affinity + affinity_gain)
 
-    # Action-specific text lists
     action_done_texts = {"feed": CAT_FEED_DONE, "pet": CAT_PET_DONE, "play": CAT_PLAY_DONE}[action]
 
     roll = random.random()
@@ -130,7 +120,7 @@ async def _do_cat_action(message: Message, bot: Bot, action: str):
     else:
         delta = random.randint(1, 3)
         new_mood = cat["mood_score"] - 1
-        new_affinity = max(0, affinity + 1)  # still gain a little
+        new_affinity = max(0, affinity + 1)
         await repo.update_cat(chat_id, user_id, new_mood, today,
                               affinity=new_affinity, action_field=cooldown_field,
                               actions_today=actions_today)
@@ -138,50 +128,70 @@ async def _do_cat_action(message: Message, bot: Bot, action: str):
         text = random.choice(CAT_NEGATIVE)
         text += f"\n🏠 Порядок: -{delta} ({progress_bar(new_order)})"
 
-    # Show affinity only when all 3 actions done today
     if actions_today >= 3:
         text += f"\n❤️ Привязанность: {_affinity_bar(new_affinity)}"
 
-    await message.answer(text)
+    return text
 
 
-# ── Legacy command: /cat = feed ───────────────────────────────────────
+async def _send_cat(message: Message, bot: Bot, user_id: int, action: str):
+    """Command path: edit previous message or send new."""
+    chat_id = message.chat.id
+    text = await _build_cat_response(chat_id, user_id, bot, action)
 
-async def play_cat(message: Message, bot: Bot):
-    await _do_cat_action(message, bot, "feed")
+    key = (chat_id, user_id)
+    prev_id = _last_cat_msg.get(key)
+    if prev_id:
+        try:
+            await bot.edit_message_text(text, chat_id=chat_id, message_id=prev_id)
+            return
+        except Exception:
+            pass
+    sent = await message.answer(text)
+    _last_cat_msg[key] = sent.message_id
 
+
+async def _edit_cat(callback: CallbackQuery, bot: Bot, action: str):
+    """Callback path: edit the callback message, use correct user_id."""
+    text = await _build_cat_response(
+        callback.message.chat.id, callback.from_user.id, bot, action,
+    )
+    await safe_edit_text(callback.message, text, reply_markup=None)
+    await callback.answer()
+
+
+# ── Commands ──────────────────────────────────────────────────────────
 
 @router.message(Command("cat"))
 async def cmd_cat(message: Message, bot: Bot):
-    await play_cat(message, bot)
+    await _send_cat(message, bot, message.from_user.id, "feed")
 
 
 @router.message(Command("cat_pet"))
 async def cmd_cat_pet(message: Message, bot: Bot):
-    await _do_cat_action(message, bot, "pet")
+    await _send_cat(message, bot, message.from_user.id, "pet")
 
 
 @router.message(Command("cat_play"))
 async def cmd_cat_play(message: Message, bot: Bot):
-    await _do_cat_action(message, bot, "play")
+    await _send_cat(message, bot, message.from_user.id, "play")
 
+
+# ── Callbacks ─────────────────────────────────────────────────────────
 
 @router.callback_query(F.data == "game:cat")
 async def cb_cat(callback: CallbackQuery, bot: Bot):
-    await play_cat(callback.message, bot)
-    await callback.answer()
+    await _edit_cat(callback, bot, "feed")
 
 
 @router.callback_query(F.data == "game:cat_pet")
 async def cb_cat_pet(callback: CallbackQuery, bot: Bot):
-    await _do_cat_action(callback.message, bot, "pet")
-    await callback.answer()
+    await _edit_cat(callback, bot, "pet")
 
 
 @router.callback_query(F.data == "game:cat_play")
 async def cb_cat_play(callback: CallbackQuery, bot: Bot):
-    await _do_cat_action(callback.message, bot, "play")
-    await callback.answer()
+    await _edit_cat(callback, bot, "play")
 
 
 # ── Home order ────────────────────────────────────────────────────────

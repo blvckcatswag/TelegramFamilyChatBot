@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, ChatPermissions
 from app.db import repositories as repo
 from app.config import settings as cfg
-from app.utils.helpers import today_str, now_kyiv
+from app.utils.helpers import today_str, now_kyiv, safe_edit_text
 from app.texts import (
     CACTUS_POSITIVE, CACTUS_NEGATIVE, GAMES_DISABLED,
     CACTUS_OVERWATER, CACTUS_DEATH,
@@ -27,6 +27,9 @@ STAGES = [
     (100, "👑🌵", "Легендарный кактус"),
 ]
 
+# Track last bot message per user to edit instead of sending new (command/reply-kb path)
+_last_cactus_msg: dict[tuple[int, int], int] = {}
+
 
 def _get_stage(height: int) -> tuple[str, str]:
     """Return (emoji, name) for cactus height."""
@@ -45,40 +48,31 @@ async def can_mute_user(bot: Bot, chat_id: int, user_id: int) -> bool:
         return False
 
 
-async def play_cactus(message: Message, bot: Bot):
-    chat_id = message.chat.id
-    user_id = message.from_user.id
-
+async def _build_cactus_response(chat_id: int, user_id: int, bot: Bot) -> str:
+    """Compute cactus result, update DB, return text to display."""
     s = await repo.get_settings(chat_id)
     if not s.get("games_enabled"):
-        await message.answer(GAMES_DISABLED)
-        return
+        return GAMES_DISABLED
 
     cactus = await repo.get_cactus(chat_id, user_id)
     today = today_str()
 
-    # Reset daily counter if new day
     waters_today = cactus.get("waters_today", 0) or 0
     if cactus["last_play_date"] != today:
         waters_today = 0
 
-    # Check overwater risk
     chance_idx = min(waters_today, len(OVERWATER_CHANCES) - 1)
     overwater_chance = OVERWATER_CHANCES[chance_idx]
 
     if random.random() < overwater_chance:
-        # OVERWATERED — cactus dies!
         old_height = cactus["height_cm"]
         await repo.reset_cactus(chat_id, user_id)
-        death_text = random.choice(CACTUS_DEATH).format(height=old_height)
-        await message.answer(death_text)
-        return
+        return random.choice(CACTUS_DEATH).format(height=old_height)
 
     waters_today += 1
 
     roll = random.random()
     if roll < cfg.CACTUS_NEGATIVE_CHANCE:
-        # Negative event (prick)
         new_height = max(0, cactus["height_cm"] - 1)
         await repo.update_cactus(chat_id, user_id, new_height, today, waters_today)
 
@@ -99,24 +93,41 @@ async def play_cactus(message: Message, bot: Bot):
         else:
             neg_text += f"\n📉 Штраф: -1 см (= {new_height} см)"
 
-        await message.answer(neg_text)
-    else:
-        # Success
-        new_height = cactus["height_cm"] + 1
-        await repo.update_cactus(chat_id, user_id, new_height, today, waters_today)
+        return neg_text
 
-        stage_emoji, stage_name = _get_stage(new_height)
-        pos_text = random.choice(CACTUS_POSITIVE)
-        pos_text += f"\n{stage_emoji} {stage_name} | {new_height} см"
+    # Success
+    new_height = cactus["height_cm"] + 1
+    await repo.update_cactus(chat_id, user_id, new_height, today, waters_today)
 
-        # Overwater warning
-        next_chance_idx = min(waters_today, len(OVERWATER_CHANCES) - 1)
-        next_chance = OVERWATER_CHANCES[next_chance_idx]
-        if next_chance > 0:
-            warning = random.choice(CACTUS_OVERWATER)
-            pos_text += f"\n\n⚠️ {warning} (шанс перелива: {int(next_chance * 100)}%)"
+    stage_emoji, stage_name = _get_stage(new_height)
+    pos_text = random.choice(CACTUS_POSITIVE)
+    pos_text += f"\n{stage_emoji} {stage_name} | {new_height} см"
 
-        await message.answer(pos_text)
+    next_chance_idx = min(waters_today, len(OVERWATER_CHANCES) - 1)
+    next_chance = OVERWATER_CHANCES[next_chance_idx]
+    if next_chance > 0:
+        warning = random.choice(CACTUS_OVERWATER)
+        pos_text += f"\n\n⚠️ {warning} (шанс перелива: {int(next_chance * 100)}%)"
+
+    return pos_text
+
+
+async def play_cactus(message: Message, bot: Bot):
+    """Command / reply-keyboard path: edit previous message or send new."""
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    text = await _build_cactus_response(chat_id, user_id, bot)
+
+    key = (chat_id, user_id)
+    prev_id = _last_cactus_msg.get(key)
+    if prev_id:
+        try:
+            await bot.edit_message_text(text, chat_id=chat_id, message_id=prev_id)
+            return
+        except Exception:
+            pass
+    sent = await message.answer(text)
+    _last_cactus_msg[key] = sent.message_id
 
 
 @router.message(Command("cactus"))
@@ -126,5 +137,9 @@ async def cmd_cactus(message: Message, bot: Bot):
 
 @router.callback_query(F.data == "game:cactus")
 async def cb_cactus(callback: CallbackQuery, bot: Bot):
-    await play_cactus(callback.message, bot)
+    # callback.from_user — реальный юзер; callback.message.from_user — бот (не то!)
+    text = await _build_cactus_response(
+        callback.message.chat.id, callback.from_user.id, bot,
+    )
+    await safe_edit_text(callback.message, text, reply_markup=None)
     await callback.answer()
