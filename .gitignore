@@ -212,3 +212,4 @@ bot.db-shm
 bot.db-wal
 .claude/
 CLAUDE.md
+TODO.txt
