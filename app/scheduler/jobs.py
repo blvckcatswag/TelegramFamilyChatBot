@@ -221,6 +221,44 @@ async def restore_reminders():
     logger.info(f"Restored {restored} reminders")
 
 
+# ──────────────────── Weekly stats broadcast ────────────────────
+
+async def weekly_stats_job():
+    from app.db import repositories as repo
+
+    bot = get_bot()
+    if not bot:
+        return
+
+    def fmt_list(items, val_key, unit):
+        if not items:
+            return "  — пока никого"
+        lines = []
+        for i, row in enumerate(items, 1):
+            name = row.get("first_name") or row.get("username") or "?"
+            val = row.get(val_key, 0)
+            lines.append(f"  {i}. {name} — {val} {unit}")
+        return "\n".join(lines)
+
+    chats = await repo.get_all_active_chats()
+    for chat in chats:
+        chat_id = chat["chat_id"]
+        try:
+            cactus_top = await repo.get_cactus_top(chat_id, 5)
+            cat_top = await repo.get_cat_top(chat_id, 5)
+            duel_top = await repo.get_duel_top(chat_id, 5)
+
+            text = (
+                "📊 <b>Итоги недели</b>\n\n"
+                f"<b>🌵 Кактус:</b>\n{fmt_list(cactus_top, 'height_cm', 'см')}\n\n"
+                f"<b>🐈 Кот:</b>\n{fmt_list(cat_top, 'mood_score', 'очков')}\n\n"
+                f"<b>⚔️ Дуэли:</b>\n{fmt_list(duel_top, 'wins', 'побед')}"
+            )
+            await bot.send_message(chat_id, text, parse_mode="HTML")
+        except Exception as e:
+            logger.error(f"Weekly stats failed for {chat_id}: {e}")
+
+
 # ──────────────────── Setup all cron jobs ────────────────────
 
 async def cleanup_message_authors():
@@ -259,3 +297,7 @@ def setup_cron_jobs():
     # Cat affinity decay — every day at 00:05 Kyiv (decrease affinity for inactive cats)
     s.add_job(decay_cat_affinity_job, "cron", hour=0, minute=5,
               id="cat_affinity_decay", replace_existing=True)
+
+    # Weekly stats — every Sunday at 23:55 Kyiv
+    s.add_job(weekly_stats_job, "cron", day_of_week="sun", hour=23, minute=55,
+              id="weekly_stats", replace_existing=True)
