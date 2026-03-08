@@ -39,8 +39,7 @@ def kb_games() -> ReplyKeyboardMarkup:
     """Level 2 — games submenu."""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [_KB(text="🌵 Кактус"), _KB(text="🐈 Кот")],
-            [_KB(text="🐾 Погладить"), _KB(text="🧶 Поиграть")],
+            [_KB(text="🌵 Полить кактус"), _KB(text="🐈 Кот")],
             [_KB(text="⚔️ Дуэль"), _KB(text="🔫 Рулетка")],
             [_KB(text="🧹 Порядок"), _KB(text="🏆 Топ")],
             [_KB(text="◀️ Назад")],
@@ -48,6 +47,20 @@ def kb_games() -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         one_time_keyboard=False,
         input_field_placeholder="Выбери игру...",
+    )
+
+
+def kb_cat() -> ReplyKeyboardMarkup:
+    """Level 3 — cat submenu."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [_KB(text="🍗 Покормить")],
+            [_KB(text="🐾 Погладить"), _KB(text="🧶 Поиграть")],
+            [_KB(text="◀️ К играм")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        input_field_placeholder="Что сделать с котом?",
     )
 
 

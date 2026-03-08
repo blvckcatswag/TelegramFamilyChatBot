@@ -7,7 +7,7 @@ from app.config import settings as cfg
 from app.utils.helpers import today_str, progress_bar, safe_edit_text
 from app.bot.keyboards import back_to_menu_kb
 from app.texts import (
-    CAT_POSITIVE, CAT_NEUTRAL, CAT_NEGATIVE, CAT_EASTER_EGG,
+    CAT_NEUTRAL, CAT_NEGATIVE, CAT_EASTER_EGG,
     HOME_ORDER_MIN_COMMENT, HOME_ORDER_MAX_COMMENT, GAMES_DISABLED,
     CAT_FEED_DONE, CAT_PET_DONE, CAT_PLAY_DONE,
     CAT_FEED_COOLDOWN, CAT_PET_COOLDOWN, CAT_PLAY_COOLDOWN,
@@ -111,16 +111,18 @@ async def _do_cat_action(message: Message, bot: Bot, action: str):
     affinity_gain = {"feed": 2, "pet": 3, "play": 2}[action]
     new_affinity = min(100, affinity + affinity_gain)
 
+    # Action-specific text lists
+    action_done_texts = {"feed": CAT_FEED_DONE, "pet": CAT_PET_DONE, "play": CAT_PLAY_DONE}[action]
+
     roll = random.random()
     if roll < positive_chance:
         new_mood = cat["mood_score"] + 2
         await repo.update_cat(chat_id, user_id, new_mood, today,
                               affinity=new_affinity, action_field=cooldown_field,
                               actions_today=actions_today)
-        new_order = await repo.update_home_order(chat_id, 1)
-        action_text = {"feed": CAT_FEED_DONE, "pet": CAT_PET_DONE, "play": CAT_PLAY_DONE}[action]
-        text = random.choice(CAT_POSITIVE)
-        text += f"\n🐈 Настроение: {new_mood} | {random.choice(action_text)}"
+        await repo.update_home_order(chat_id, 1)
+        text = f"🐈 {random.choice(action_done_texts)}"
+        text += f"\n😺 Настроение: {new_mood} (+2) | +1 порядок"
     elif roll < positive_chance + cfg.CAT_NEUTRAL_CHANCE:
         await repo.update_cat(chat_id, user_id, cat["mood_score"], today,
                               affinity=new_affinity, action_field=cooldown_field,
@@ -137,7 +139,10 @@ async def _do_cat_action(message: Message, bot: Bot, action: str):
         text = random.choice(CAT_NEGATIVE)
         text += f"\n🏠 Порядок: -{delta} ({progress_bar(new_order)})"
 
-    text += f"\n❤️ Привязанность: {_affinity_bar(new_affinity)}"
+    # Show affinity only when all 3 actions done today
+    if actions_today >= 3:
+        text += f"\n❤️ Привязанность: {_affinity_bar(new_affinity)}"
+
     await message.answer(text)
 
 
