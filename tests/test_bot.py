@@ -707,14 +707,14 @@ async def test_delete_trigger_middleware_no_state(setup_db):
 
 @pytest.mark.asyncio
 async def test_blackjack_profile_created(setup_chat):
-    """Новый профиль создаётся с балансом 1000."""
+    """Новый профиль создаётся с балансом 5000."""
     profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
-    assert profile["balance"] == 1000
+    assert profile["balance"] == 5000
     assert profile["total_games"] == 0
     assert profile["wins"] == 0
     assert profile["losses"] == 0
     assert profile["draws"] == 0
-    assert profile["max_balance"] == 1000
+    assert profile["max_balance"] == 5000
 
 
 @pytest.mark.asyncio
@@ -722,11 +722,11 @@ async def test_blackjack_win(setup_chat):
     """Победа увеличивает баланс на ставку."""
     await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
     new_balance = await repo.update_blackjack_balance(CHAT_ID, USER_ID_1, 100, "win")
-    assert new_balance == 1100
+    assert new_balance == 5100
     profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
     assert profile["wins"] == 1
     assert profile["total_games"] == 1
-    assert profile["max_balance"] == 1100
+    assert profile["max_balance"] == 5100
 
 
 @pytest.mark.asyncio
@@ -734,7 +734,7 @@ async def test_blackjack_loss(setup_chat):
     """Поражение уменьшает баланс на ставку."""
     await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
     new_balance = await repo.update_blackjack_balance(CHAT_ID, USER_ID_1, -100, "loss")
-    assert new_balance == 900
+    assert new_balance == 4900
     profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
     assert profile["losses"] == 1
     assert profile["total_games"] == 1
@@ -745,7 +745,7 @@ async def test_blackjack_draw(setup_chat):
     """Ничья не меняет баланс."""
     await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
     new_balance = await repo.update_blackjack_balance(CHAT_ID, USER_ID_1, 0, "draw")
-    assert new_balance == 1000
+    assert new_balance == 5000
     profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
     assert profile["draws"] == 1
     assert profile["total_games"] == 1
@@ -767,7 +767,7 @@ async def test_weekly_credits_given(setup_chat):
     result = await repo.claim_weekly_credits(CHAT_ID, USER_ID_1)
     assert result is True
     profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
-    assert profile["balance"] == 6000  # 1000 + 5000
+    assert profile["balance"] == 10000  # 5000 + 5000
 
 
 @pytest.mark.asyncio
@@ -777,7 +777,7 @@ async def test_weekly_credits_cooldown(setup_chat):
     result = await repo.claim_weekly_credits(CHAT_ID, USER_ID_1)
     assert result is False
     profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
-    assert profile["balance"] == 6000  # не изменился
+    assert profile["balance"] == 10000  # не изменился после второго запроса
 
 
 @pytest.mark.asyncio

@@ -846,9 +846,9 @@ async def get_blackjack_profile(chat_id: int, user_id: int) -> dict:
             "INSERT INTO BlackjackProfile(chat_id, user_id) VALUES($1, $2) ON CONFLICT DO NOTHING",
             chat_id, user_id,
         )
-        return {"chat_id": chat_id, "user_id": user_id, "balance": 1000,
+        return {"chat_id": chat_id, "user_id": user_id, "balance": 5000,
                 "total_games": 0, "wins": 0, "losses": 0, "draws": 0,
-                "max_balance": 1000, "last_weekly": None}
+                "max_balance": 5000, "last_weekly": None}
     return row
 
 
