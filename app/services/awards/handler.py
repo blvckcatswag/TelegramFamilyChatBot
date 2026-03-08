@@ -174,23 +174,12 @@ def format_awards_list(awards: list[dict]) -> str:
 
 @router.message(Command("awards"))
 async def cmd_awards(message: Message):
-    args = message.text.split()
     now = now_kyiv()
-
-    if len(args) > 1:
-        try:
-            parts = args[1].split(".")
-            month = int(parts[0])
-            year = int(parts[1]) if len(parts) > 1 else now.year
-        except (ValueError, IndexError):
-            await message.answer("Формат: /awards ММ.ГГГГ (напр: /awards 03.2026)")
-            return
-    else:
-        year, month = now.year, now.month
+    year, month = now.year, now.month
 
     awards = await repo.get_awards(message.chat.id, year, month)
     if not awards:
-        await message.answer(f"🏆 Нет наград за {month:02d}.{year}")
+        await message.answer(f"🏆 Нет наград за {month:02d}.{year}. Итоги подводятся в конце месяца.")
         return
 
     text = format_awards_list(awards)
