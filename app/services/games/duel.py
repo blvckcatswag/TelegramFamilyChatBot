@@ -63,14 +63,14 @@ async def cmd_duel(message: Message, bot: Bot):
         return
 
     # Get opponent from reply or mention
+    # @mention in text takes priority over reply_to_message (reply may point to bot)
     opponent = None
     mute_minutes = cfg.DUEL_DEFAULT_MUTE_MINUTES
 
     bot_info = await bot.get_me()
 
-    if message.reply_to_message and message.reply_to_message.from_user:
-        opponent = message.reply_to_message.from_user
-    elif message.entities:
+    # First check for explicit @mention or text_mention in message
+    if message.entities:
         for entity in message.entities:
             if entity.type == "text_mention" and entity.user:
                 opponent = entity.user
@@ -92,6 +92,10 @@ async def cmd_duel(message: Message, bot: Bot):
                     await message.answer(f"⚔️ Пользователь @{username} не найден в этом чате.")
                     return
                 break
+
+    # Fall back to reply_to_message if no @mention found
+    if opponent is None and message.reply_to_message and message.reply_to_message.from_user:
+        opponent = message.reply_to_message.from_user
 
     # Parse mute minutes
     for arg in args:
