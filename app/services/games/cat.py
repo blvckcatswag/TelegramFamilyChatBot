@@ -120,9 +120,8 @@ async def _do_cat_action(message: Message, bot: Bot, action: str):
         await repo.update_cat(chat_id, user_id, new_mood, today,
                               affinity=new_affinity, action_field=cooldown_field,
                               actions_today=actions_today)
-        await repo.update_home_order(chat_id, 1)
         text = f"🐈 {random.choice(action_done_texts)}"
-        text += f"\n😺 Настроение: {new_mood} (+2) | +1 порядок"
+        text += f"\n😺 +2 настроения"
     elif roll < positive_chance + cfg.CAT_NEUTRAL_CHANCE:
         await repo.update_cat(chat_id, user_id, cat["mood_score"], today,
                               affinity=new_affinity, action_field=cooldown_field,
