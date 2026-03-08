@@ -196,6 +196,24 @@ async def _run_migrations(db: Database):
         )
     except Exception:
         pass
+    # BlackjackProfile table (added in v2)
+    try:
+        await db.execute_script("""
+            CREATE TABLE IF NOT EXISTS BlackjackProfile (
+                chat_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                balance INTEGER NOT NULL DEFAULT 1000,
+                total_games INTEGER NOT NULL DEFAULT 0,
+                wins INTEGER NOT NULL DEFAULT 0,
+                losses INTEGER NOT NULL DEFAULT 0,
+                draws INTEGER NOT NULL DEFAULT 0,
+                max_balance INTEGER NOT NULL DEFAULT 1000,
+                last_weekly TEXT,
+                UNIQUE(chat_id, user_id)
+            );
+        """)
+    except Exception:
+        pass
 
 
 async def _init_postgres(db: Database):
@@ -392,6 +410,19 @@ async def _init_postgres(db: Database):
         text TEXT,
         status TEXT NOT NULL DEFAULT 'open',
         created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS BlackjackProfile (
+        chat_id BIGINT NOT NULL,
+        user_id BIGINT NOT NULL,
+        balance INTEGER NOT NULL DEFAULT 1000,
+        total_games INTEGER NOT NULL DEFAULT 0,
+        wins INTEGER NOT NULL DEFAULT 0,
+        losses INTEGER NOT NULL DEFAULT 0,
+        draws INTEGER NOT NULL DEFAULT 0,
+        max_balance INTEGER NOT NULL DEFAULT 1000,
+        last_weekly TEXT,
+        UNIQUE(chat_id, user_id)
     );
     """)
 
@@ -591,5 +622,18 @@ async def _init_sqlite(db: Database):
         text TEXT,
         status TEXT NOT NULL DEFAULT 'open',
         created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS BlackjackProfile (
+        chat_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        balance INTEGER NOT NULL DEFAULT 1000,
+        total_games INTEGER NOT NULL DEFAULT 0,
+        wins INTEGER NOT NULL DEFAULT 0,
+        losses INTEGER NOT NULL DEFAULT 0,
+        draws INTEGER NOT NULL DEFAULT 0,
+        max_balance INTEGER NOT NULL DEFAULT 1000,
+        last_weekly TEXT,
+        UNIQUE(chat_id, user_id)
     );
     """)

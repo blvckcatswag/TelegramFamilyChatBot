@@ -139,6 +139,7 @@ async def cmd_mystats(message: Message):
     duel_stats = await repo.get_duel_stats(chat_id, user_id)
     roulette_survived = await repo.get_roulette_survival_count(chat_id, user_id)
     reactions_received = await repo.get_my_reactions_count(chat_id, user_id)
+    bj = await repo.get_blackjack_profile(chat_id, user_id)
 
     text = (
         f"👤 <b>Статистика {message.from_user.first_name}</b>\n\n"
@@ -146,7 +147,8 @@ async def cmd_mystats(message: Message):
         f"🐈 Кот: {cat['mood_score']} очков ({cat['total_plays']} кормлений)\n"
         f"⚔️ Дуэли: {duel_stats['wins']}/{duel_stats['total']} побед\n"
         f"🔫 Рулетка: выжил {roulette_survived} раз\n"
-        f"👍 Реакций получено: {reactions_received}"
+        f"👍 Реакций получено: {reactions_received}\n"
+        f"💰 Кредиты: {bj['balance']} (макс: {bj['max_balance']})"
     )
     await message.answer(text, reply_markup=back_to_menu_kb(), parse_mode="HTML")
 

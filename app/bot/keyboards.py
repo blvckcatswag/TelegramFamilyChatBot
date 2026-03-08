@@ -18,9 +18,10 @@ def games_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🌵 Кактус", callback_data="game:cactus"),
          InlineKeyboardButton(text="🐈 Кот", callback_data="game:cat")],
-        [InlineKeyboardButton(text="🧹 Порядок дома", callback_data="game:home"),
-         InlineKeyboardButton(text="⚔️ Дуэль", callback_data="game:duel")],
-        [InlineKeyboardButton(text="🔫 Рулетка", callback_data="game:roulette")],
+        [InlineKeyboardButton(text="🃏 Блэкджек", callback_data="game:blackjack"),
+         InlineKeyboardButton(text="🧹 Порядок дома", callback_data="game:home")],
+        [InlineKeyboardButton(text="⚔️ Дуэль", callback_data="game:duel"),
+         InlineKeyboardButton(text="🔫 Рулетка", callback_data="game:roulette")],
         [InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main")],
     ])
 

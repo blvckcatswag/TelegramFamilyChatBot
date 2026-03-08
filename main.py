@@ -18,6 +18,7 @@ from app.services.games.cactus import router as cactus_router
 from app.services.games.cat import router as cat_router
 from app.services.games.duel import router as duel_router
 from app.services.games.roulette import router as roulette_router
+from app.services.games.blackjack import router as blackjack_router
 from app.services.reminders.handler import router as reminders_router
 from app.services.weather.handler import router as weather_router
 from app.services.quotes.handler import router as quotes_router
@@ -68,6 +69,9 @@ BOT_COMMANDS = [
     BotCommand(command="home", description="Порядок дома"),
     BotCommand(command="duel", description="Вызвать на дуэль"),
     BotCommand(command="roulette", description="Русская рулетка"),
+    BotCommand(command="blackjack", description="Блэкджек"),
+    BotCommand(command="weekly", description="Недельные кредиты"),
+    BotCommand(command="balance", description="Баланс кредитов"),
     BotCommand(command="remind", description="Создать напоминание"),
     BotCommand(command="reminders", description="Мои напоминания"),
     BotCommand(command="weather", description="Погода сейчас"),
@@ -108,6 +112,7 @@ async def main():
     dp.include_router(cat_router)
     dp.include_router(duel_router)
     dp.include_router(roulette_router)
+    dp.include_router(blackjack_router)
     dp.include_router(reminders_router)
     dp.include_router(weather_router)
     dp.include_router(quotes_router)

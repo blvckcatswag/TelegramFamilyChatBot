@@ -701,3 +701,121 @@ async def test_delete_trigger_middleware_no_state(setup_db):
     await middleware(handler, event, {"state": None})
 
     handler.assert_awaited_once()
+
+
+# ──────────────────── Blackjack ────────────────────
+
+@pytest.mark.asyncio
+async def test_blackjack_profile_created(setup_chat):
+    """Новый профиль создаётся с балансом 1000."""
+    profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    assert profile["balance"] == 1000
+    assert profile["total_games"] == 0
+    assert profile["wins"] == 0
+    assert profile["losses"] == 0
+    assert profile["draws"] == 0
+    assert profile["max_balance"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_blackjack_win(setup_chat):
+    """Победа увеличивает баланс на ставку."""
+    await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    new_balance = await repo.update_blackjack_balance(CHAT_ID, USER_ID_1, 100, "win")
+    assert new_balance == 1100
+    profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    assert profile["wins"] == 1
+    assert profile["total_games"] == 1
+    assert profile["max_balance"] == 1100
+
+
+@pytest.mark.asyncio
+async def test_blackjack_loss(setup_chat):
+    """Поражение уменьшает баланс на ставку."""
+    await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    new_balance = await repo.update_blackjack_balance(CHAT_ID, USER_ID_1, -100, "loss")
+    assert new_balance == 900
+    profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    assert profile["losses"] == 1
+    assert profile["total_games"] == 1
+
+
+@pytest.mark.asyncio
+async def test_blackjack_draw(setup_chat):
+    """Ничья не меняет баланс."""
+    await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    new_balance = await repo.update_blackjack_balance(CHAT_ID, USER_ID_1, 0, "draw")
+    assert new_balance == 1000
+    profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    assert profile["draws"] == 1
+    assert profile["total_games"] == 1
+
+
+@pytest.mark.asyncio
+async def test_blackjack_balance_floor(setup_chat):
+    """Баланс не уходит ниже нуля."""
+    await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    new_balance = await repo.update_blackjack_balance(CHAT_ID, USER_ID_1, -9999, "loss")
+    assert new_balance == 0
+    profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    assert profile["balance"] == 0
+
+
+@pytest.mark.asyncio
+async def test_weekly_credits_given(setup_chat):
+    """Первый запрос недельных кредитов даёт True."""
+    result = await repo.claim_weekly_credits(CHAT_ID, USER_ID_1)
+    assert result is True
+    profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    assert profile["balance"] == 6000  # 1000 + 5000
+
+
+@pytest.mark.asyncio
+async def test_weekly_credits_cooldown(setup_chat):
+    """Второй запрос в ту же неделю возвращает False."""
+    await repo.claim_weekly_credits(CHAT_ID, USER_ID_1)
+    result = await repo.claim_weekly_credits(CHAT_ID, USER_ID_1)
+    assert result is False
+    profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    assert profile["balance"] == 6000  # не изменился
+
+
+@pytest.mark.asyncio
+async def test_blackjack_top(setup_chat):
+    """Топ возвращает пользователей отсортированных по балансу."""
+    await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    await repo.get_blackjack_profile(CHAT_ID, USER_ID_2)
+    await repo.update_blackjack_balance(CHAT_ID, USER_ID_1, 500, "win")
+    top = await repo.get_blackjack_top(CHAT_ID, limit=5)
+    assert len(top) == 2
+    assert top[0]["balance"] >= top[1]["balance"]
+    assert top[0]["user_id"] == USER_ID_1
+
+
+def test_card_score():
+    """Счёт простой руки без тузов."""
+    from app.services.games.blackjack import _score
+    hand = ["10♠", "7♥"]
+    assert _score(hand) == 17
+
+    hand2 = ["K♦", "Q♣"]
+    assert _score(hand2) == 20
+
+    hand3 = ["5♠", "6♥", "9♣"]
+    assert _score(hand3) == 20
+
+
+def test_card_score_ace_adjustment():
+    """Туз переключается с 11 на 1 при переборе."""
+    from app.services.games.blackjack import _score
+    # A + K = 21
+    hand = ["A♠", "K♥"]
+    assert _score(hand) == 21
+
+    # A + K + 5 = 16 (A считается как 1)
+    hand2 = ["A♠", "K♥", "5♦"]
+    assert _score(hand2) == 16
+
+    # A + A = 12 (один туз = 11, второй = 1)
+    hand3 = ["A♠", "A♥"]
+    assert _score(hand3) == 12
