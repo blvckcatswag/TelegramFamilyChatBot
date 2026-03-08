@@ -358,12 +358,57 @@ async def get_cat(chat_id: int, user_id: int) -> dict:
     return dict(row)
 
 
-async def update_cat(chat_id: int, user_id: int, mood_score: int, today: str) -> None:
+async def update_cat(chat_id: int, user_id: int, mood_score: int, today: str,
+                     affinity: int | None = None, action_field: str | None = None,
+                     actions_today: int | None = None) -> None:
     db = await get_db()
+    parts = ["mood_score=$1", "last_play_date=$2", "total_plays=total_plays+1"]
+    args = [mood_score, today]
+    idx = 3
+
+    if affinity is not None:
+        parts.append(f"affinity=${idx}")
+        args.append(max(0, min(100, affinity)))
+        idx += 1
+    if action_field and action_field in ("last_feed_date", "last_pet_date", "last_played_date"):
+        parts.append(f"{action_field}=${idx}")
+        args.append(today)
+        idx += 1
+    if actions_today is not None:
+        parts.append(f"actions_today=${idx}")
+        args.append(actions_today)
+        idx += 1
+
+    parts_str = ", ".join(parts)
+    args.extend([chat_id, user_id])
     await db.execute(
-        "UPDATE GameCat SET mood_score=$1, last_play_date=$2, total_plays=total_plays+1 WHERE chat_id=$3 AND user_id=$4",
-        mood_score, today, chat_id, user_id,
+        f"UPDATE GameCat SET {parts_str} WHERE chat_id=${idx} AND user_id=${idx + 1}",
+        *args,
     )
+
+
+async def decay_cat_affinity() -> int:
+    """Daily job: decrease affinity for cats with 0 actions today. Returns count."""
+    db = await get_db()
+    # Decrease affinity by 1 for all cats that had 0 actions today
+    if db.is_postgres:
+        result = await db.fetchval(
+            "WITH updated AS ("
+            "  UPDATE GameCat SET affinity = GREATEST(0, affinity - 1), actions_today = 0"
+            "  WHERE actions_today = 0 AND affinity > 0 RETURNING 1"
+            ") SELECT COUNT(*) FROM updated"
+        )
+    else:
+        result = await db.fetchval(
+            "SELECT COUNT(*) FROM GameCat WHERE actions_today = 0 AND affinity > 0"
+        )
+        await db.execute(
+            "UPDATE GameCat SET affinity = MAX(0, affinity - 1), actions_today = 0"
+            " WHERE actions_today = 0 AND affinity > 0"
+        )
+    # Reset actions_today for everyone else too
+    await db.execute("UPDATE GameCat SET actions_today = 0 WHERE actions_today > 0")
+    return result or 0
 
 
 async def get_cat_top(chat_id: int, limit: int = 10) -> list[dict]:

@@ -229,6 +229,12 @@ async def cleanup_message_authors():
     logger.info(f"MessageAuthor cleanup: removed {deleted} old records")
 
 
+async def decay_cat_affinity_job():
+    from app.db import repositories as repo
+    count = await repo.decay_cat_affinity()
+    logger.info(f"Cat affinity decay: affected {count} cats")
+
+
 def setup_cron_jobs():
     s = get_scheduler()
 
@@ -249,3 +255,7 @@ def setup_cron_jobs():
     # Cleanup old MessageAuthor records (older than 30 days) — every 1st of month at 03:00 Kyiv
     s.add_job(cleanup_message_authors, "cron", day=1, hour=3, minute=0,
               id="cleanup_message_authors", replace_existing=True)
+
+    # Cat affinity decay — every day at 00:05 Kyiv (decrease affinity for inactive cats)
+    s.add_job(decay_cat_affinity_job, "cron", hour=0, minute=5,
+              id="cat_affinity_decay", replace_existing=True)

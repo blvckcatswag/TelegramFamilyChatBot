@@ -8,60 +8,143 @@ from app.utils.helpers import today_str, progress_bar, safe_edit_text
 from app.bot.keyboards import back_to_menu_kb
 from app.texts import (
     CAT_POSITIVE, CAT_NEUTRAL, CAT_NEGATIVE, CAT_EASTER_EGG,
-    CAT_ALREADY_FED, HOME_ORDER_MIN_COMMENT, HOME_ORDER_MAX_COMMENT, GAMES_DISABLED,
+    HOME_ORDER_MIN_COMMENT, HOME_ORDER_MAX_COMMENT, GAMES_DISABLED,
+    CAT_FEED_DONE, CAT_PET_DONE, CAT_PLAY_DONE,
+    CAT_FEED_COOLDOWN, CAT_PET_COOLDOWN, CAT_PLAY_COOLDOWN,
+    CAT_LOW_AFFINITY_EVENTS,
 )
 
 router = Router()
 
 
-async def play_cat(message: Message, bot: Bot):
+def _affinity_bar(affinity: int) -> str:
+    """Visual bar for affinity level."""
+    if affinity >= 80:
+        label = "обожает тебя"
+    elif affinity >= 55:
+        label = "доверяет тебе"
+    elif affinity >= 30:
+        label = "привыкает"
+    elif affinity >= 19:
+        label = "настороженно смотрит"
+    else:
+        label = "шипит и прячется"
+    return f"{progress_bar(affinity)} ({label})"
+
+
+async def _check_games_enabled(chat_id: int) -> bool:
+    s = await repo.get_settings(chat_id)
+    return bool(s.get("games_enabled"))
+
+
+async def _do_cat_action(message: Message, bot: Bot, action: str):
+    """Unified handler for feed/pet/play actions."""
     chat_id = message.chat.id
     user_id = message.from_user.id
 
-    s = await repo.get_settings(chat_id)
-    if not s.get("games_enabled"):
+    if not await _check_games_enabled(chat_id):
         await message.answer(GAMES_DISABLED)
         return
 
     cat = await repo.get_cat(chat_id, user_id)
     today = today_str()
+    affinity = cat.get("affinity", 25) or 25
+    actions_today = cat.get("actions_today", 0) or 0
 
-    if cat["last_play_date"] == today:
-        await message.answer(CAT_ALREADY_FED)
+    # Check cooldown per action type
+    cooldown_field = {
+        "feed": "last_feed_date",
+        "pet": "last_pet_date",
+        "play": "last_played_date",
+    }[action]
+
+    if cat.get(cooldown_field) == today:
+        cooldown_text = {"feed": CAT_FEED_COOLDOWN, "pet": CAT_PET_COOLDOWN, "play": CAT_PLAY_COOLDOWN}[action]
+        await message.answer(cooldown_text)
         return
 
-    # Easter egg check
-    roll_easter = random.random()
-    if roll_easter < cfg.CAT_CACTUS_EASTER_EGG_CHANCE:
+    # Reset actions_today if new day
+    if cat["last_play_date"] != today:
+        actions_today = 0
+
+    actions_today += 1
+
+    # Easter egg check (very rare)
+    if random.random() < cfg.CAT_CACTUS_EASTER_EGG_CHANCE:
         cactus = await repo.get_cactus(chat_id, user_id)
         new_height = max(0, cactus["height_cm"] - 3)
         await repo.update_cactus(chat_id, user_id, new_height, today)
         new_mood = cat["mood_score"] - 5
-        await repo.update_cat(chat_id, user_id, new_mood, today)
+        new_affinity = max(0, affinity - 5)
+        await repo.update_cat(chat_id, user_id, new_mood, today,
+                              affinity=new_affinity, action_field=cooldown_field,
+                              actions_today=actions_today)
         await repo.update_home_order(chat_id, -10)
         await message.answer(CAT_EASTER_EGG, parse_mode="HTML")
         return
 
-    roll = random.random()
+    # Low affinity negative events (<19%)
+    if affinity < 19 and random.random() < 0.35:
+        event = random.choice(CAT_LOW_AFFINITY_EVENTS)
+        new_mood = cat["mood_score"] - 2
 
-    if roll < cfg.CAT_POSITIVE_CHANCE:
+        # Special: cat knocks over cactus
+        if "кактус" in event.lower():
+            await repo.reset_cactus(chat_id, user_id)
+
+        delta = random.randint(2, 5)
+        new_order = await repo.update_home_order(chat_id, -delta)
+        await repo.update_cat(chat_id, user_id, new_mood, today,
+                              affinity=affinity, action_field=cooldown_field,
+                              actions_today=actions_today)
+        text = f"{event}\n🏠 Порядок: -{delta} ({progress_bar(new_order)})"
+        text += f"\n❤️ Привязанность: {_affinity_bar(affinity)}"
+        await message.answer(text)
+        return
+
+    # Affinity bonus: higher affinity = better outcomes
+    affinity_bonus = affinity / 100  # 0.0 to 1.0
+    positive_chance = cfg.CAT_POSITIVE_CHANCE + (affinity_bonus * 0.15)
+    negative_chance = max(0.05, cfg.CAT_NEGATIVE_CHANCE - (affinity_bonus * 0.15))
+
+    # Affinity change per action
+    affinity_gain = {"feed": 2, "pet": 3, "play": 2}[action]
+    new_affinity = min(100, affinity + affinity_gain)
+
+    roll = random.random()
+    if roll < positive_chance:
         new_mood = cat["mood_score"] + 2
-        await repo.update_cat(chat_id, user_id, new_mood, today)
+        await repo.update_cat(chat_id, user_id, new_mood, today,
+                              affinity=new_affinity, action_field=cooldown_field,
+                              actions_today=actions_today)
         new_order = await repo.update_home_order(chat_id, 1)
+        action_text = {"feed": CAT_FEED_DONE, "pet": CAT_PET_DONE, "play": CAT_PLAY_DONE}[action]
         text = random.choice(CAT_POSITIVE)
-        text += f"\n🐈 Настроение кота: {new_mood}"
-    elif roll < cfg.CAT_POSITIVE_CHANCE + cfg.CAT_NEUTRAL_CHANCE:
-        await repo.update_cat(chat_id, user_id, cat["mood_score"], today)
+        text += f"\n🐈 Настроение: {new_mood} | {random.choice(action_text)}"
+    elif roll < positive_chance + cfg.CAT_NEUTRAL_CHANCE:
+        await repo.update_cat(chat_id, user_id, cat["mood_score"], today,
+                              affinity=new_affinity, action_field=cooldown_field,
+                              actions_today=actions_today)
         text = random.choice(CAT_NEUTRAL)
     else:
         delta = random.randint(1, 3)
         new_mood = cat["mood_score"] - 1
-        await repo.update_cat(chat_id, user_id, new_mood, today)
+        new_affinity = max(0, affinity + 1)  # still gain a little
+        await repo.update_cat(chat_id, user_id, new_mood, today,
+                              affinity=new_affinity, action_field=cooldown_field,
+                              actions_today=actions_today)
         new_order = await repo.update_home_order(chat_id, -delta)
         text = random.choice(CAT_NEGATIVE)
         text += f"\n🏠 Порядок: -{delta} ({progress_bar(new_order)})"
 
+    text += f"\n❤️ Привязанность: {_affinity_bar(new_affinity)}"
     await message.answer(text)
+
+
+# ── Legacy command: /cat = feed ───────────────────────────────────────
+
+async def play_cat(message: Message, bot: Bot):
+    await _do_cat_action(message, bot, "feed")
 
 
 @router.message(Command("cat"))
@@ -69,11 +152,35 @@ async def cmd_cat(message: Message, bot: Bot):
     await play_cat(message, bot)
 
 
+@router.message(Command("cat_pet"))
+async def cmd_cat_pet(message: Message, bot: Bot):
+    await _do_cat_action(message, bot, "pet")
+
+
+@router.message(Command("cat_play"))
+async def cmd_cat_play(message: Message, bot: Bot):
+    await _do_cat_action(message, bot, "play")
+
+
 @router.callback_query(F.data == "game:cat")
 async def cb_cat(callback: CallbackQuery, bot: Bot):
     await play_cat(callback.message, bot)
     await callback.answer()
 
+
+@router.callback_query(F.data == "game:cat_pet")
+async def cb_cat_pet(callback: CallbackQuery, bot: Bot):
+    await _do_cat_action(callback.message, bot, "pet")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "game:cat_play")
+async def cb_cat_play(callback: CallbackQuery, bot: Bot):
+    await _do_cat_action(callback.message, bot, "play")
+    await callback.answer()
+
+
+# ── Home order ────────────────────────────────────────────────────────
 
 @router.message(Command("home"))
 async def cmd_home(message: Message):
@@ -102,7 +209,7 @@ async def cb_home(callback: CallbackQuery):
     elif order == 100:
         extra = HOME_ORDER_MAX_COMMENT
 
-    await safe_edit_text(callback.message, 
+    await safe_edit_text(callback.message,
         f"🧹 <b>Порядок дома</b>\n\n{bar}{extra}",
         reply_markup=back_to_menu_kb(), parse_mode="HTML",
     )
