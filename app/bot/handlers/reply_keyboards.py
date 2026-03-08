@@ -35,7 +35,7 @@ from app.bot.keyboards import settings_kb, weather_cities_delete_kb
 from app.config.settings import SUPERADMIN_ID
 from app.db import repositories as repo
 from app.services.games.cactus import play_cactus
-from app.services.games.cat import play_cat, cmd_home, _do_cat_action
+from app.services.games.cat import cmd_home, _do_cat_action
 from app.services.games.roulette import cmd_roulette
 from app.services.reminders.handler import cmd_remind, cmd_reminders
 from app.services.weather.handler import get_weather_for_chat, WeatherAddCity
@@ -43,7 +43,7 @@ from app.services.awards.handler import cmd_awards
 from app.services.feedback.handler import cmd_feedback
 from app.services.donate.handler import cmd_donate
 from app.utils.reply_keyboards import (
-    kb_start, kb_menu, kb_games, kb_reminders,
+    kb_start, kb_menu, kb_games, kb_cat, kb_reminders,
     kb_weather, kb_quotes, kb_stats, kb_help,
 )
 
@@ -172,16 +172,25 @@ async def handle_settings(message: Message):
 # ── Games ───────────────────────────────────────────────────────────
 
 
-@router.message(F.text == "🌵 Кактус")
+@router.message(F.text == "🌵 Полить кактус")
 async def handle_cactus(message: Message, bot: Bot):
-    logger.info("Reply KB: 🌵 Кактус — user=%s", message.from_user.id)
+    logger.info("Reply KB: 🌵 Полить кактус — user=%s", message.from_user.id)
     await play_cactus(message, bot)
 
 
 @router.message(F.text == "🐈 Кот")
-async def handle_cat(message: Message, bot: Bot):
+async def handle_cat(message: Message):
     logger.info("Reply KB: 🐈 Кот — user=%s", message.from_user.id)
-    await play_cat(message, bot)
+    await message.answer(
+        "🐈 <b>Кот</b>\n\nЧто сделать с котом?",
+        reply_markup=kb_cat(), parse_mode="HTML",
+    )
+
+
+@router.message(F.text == "🍗 Покормить")
+async def handle_cat_feed(message: Message, bot: Bot):
+    logger.info("Reply KB: 🍗 Покормить — user=%s", message.from_user.id)
+    await _do_cat_action(message, bot, "feed")
 
 
 @router.message(F.text == "🐾 Погладить")
@@ -194,6 +203,15 @@ async def handle_cat_pet(message: Message, bot: Bot):
 async def handle_cat_play(message: Message, bot: Bot):
     logger.info("Reply KB: 🧶 Поиграть — user=%s", message.from_user.id)
     await _do_cat_action(message, bot, "play")
+
+
+@router.message(F.text == "◀️ К играм")
+async def handle_back_to_games(message: Message):
+    logger.info("Reply KB: ◀️ К играм — user=%s", message.from_user.id)
+    await message.answer(
+        "🎮 <b>Игры</b>\n\nВыбери игру:",
+        reply_markup=kb_games(), parse_mode="HTML",
+    )
 
 
 @router.message(F.text == "⚔️ Дуэль")
