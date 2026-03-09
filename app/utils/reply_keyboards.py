@@ -64,6 +64,21 @@ def kb_cat() -> ReplyKeyboardMarkup:
     )
 
 
+def kb_home() -> ReplyKeyboardMarkup:
+    """Level 3 — home order submenu."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [_KB(text="🧹 Подмести"), _KB(text="🪣 Помыть пол")],
+            [_KB(text="🍽 Помыть посуду"), _KB(text="🧽 Протереть пыль")],
+            [_KB(text="🗑 Вынести мусор")],
+            [_KB(text="◀️ К играм")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        input_field_placeholder="Что убрать?",
+    )
+
+
 def kb_reminders() -> ReplyKeyboardMarkup:
     """Level 2 — reminders submenu."""
     return ReplyKeyboardMarkup(
