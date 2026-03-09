@@ -134,7 +134,7 @@ async def _build_cat_response(chat_id: int, user_id: int, bot: Bot, action: str)
 
 
 async def _send_cat(message: Message, bot: Bot, user_id: int, action: str):
-    """Command path: edit previous message or send new."""
+    """Command path: delete previous message, send new."""
     chat_id = message.chat.id
     text = await _build_cat_response(chat_id, user_id, bot, action)
 
@@ -142,8 +142,7 @@ async def _send_cat(message: Message, bot: Bot, user_id: int, action: str):
     prev_id = _last_cat_msg.get(key)
     if prev_id:
         try:
-            await bot.edit_message_text(text, chat_id=chat_id, message_id=prev_id)
-            return
+            await bot.delete_message(chat_id, prev_id)
         except Exception:
             pass
     sent = await message.answer(text)

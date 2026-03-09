@@ -353,12 +353,6 @@ async def cb_join(callback: CallbackQuery):
         await callback.answer("Ты уже в игре!", show_alert=True)
         return
 
-    last = await repo.get_last_roulette_time(chat_id, user_id)
-    remaining = _check_cooldown_sync(last)
-    if remaining:
-        await callback.answer(f"🔫 Кулдаун! Подожди {remaining} мин.", show_alert=True)
-        return
-
     await repo.get_or_create_user(
         user_id, chat_id, callback.from_user.username, callback.from_user.first_name,
     )

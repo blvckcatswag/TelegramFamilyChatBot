@@ -4,7 +4,7 @@ from aiogram.types import Message, ChatMemberUpdated
 from aiogram.filters import ChatMemberUpdatedFilter, IS_NOT_MEMBER, IS_MEMBER
 from app.db import repositories as repo
 from app.config.settings import SUPERADMIN_ID
-from app.bot.keyboards import main_menu_kb
+from app.utils.reply_keyboards import kb_start
 
 router = Router()
 
@@ -38,7 +38,7 @@ async def on_bot_added(event: ChatMemberUpdated, bot: Bot):
     await repo.set_user_role(adder_id, chat_id, "owner")
 
     try:
-        await bot.send_message(chat_id, WELCOME_MESSAGE, reply_markup=main_menu_kb(), parse_mode="HTML")
+        await bot.send_message(chat_id, WELCOME_MESSAGE, reply_markup=kb_start(), parse_mode="HTML")
     except Exception:
         pass
 

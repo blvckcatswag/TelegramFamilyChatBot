@@ -41,7 +41,8 @@ def kb_games() -> ReplyKeyboardMarkup:
         keyboard=[
             [_KB(text="🌵 Полить кактус"), _KB(text="🐈 Кот")],
             [_KB(text="⚔️ Дуэль"), _KB(text="🔫 Рулетка")],
-            [_KB(text="🧹 Порядок"), _KB(text="🏆 Топ")],
+            [_KB(text="🧹 Порядок"), _KB(text="🃏 Блэкджек")],
+            [_KB(text="🏆 Топ")],
             [_KB(text="◀️ Назад")],
         ],
         resize_keyboard=True,
