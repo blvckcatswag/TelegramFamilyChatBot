@@ -273,6 +273,20 @@ async def decay_cat_affinity_job():
     logger.info(f"Cat affinity decay: affected {count} cats")
 
 
+async def home_decay_job():
+    """Nightly order decay: -20 to -60 points, runs Tue-Sun."""
+    from app.db import repositories as repo
+    await repo.decay_home_orders(min_decay=20, max_decay=60)
+    logger.info("Home order: nightly decay applied")
+
+
+async def home_weekly_reset_job():
+    """Monday reset: set all home orders to 20 (weekend mess)."""
+    from app.db import repositories as repo
+    await repo.reset_home_orders(score=20)
+    logger.info("Home order: weekly reset to 20")
+
+
 def setup_cron_jobs():
     s = get_scheduler()
 
@@ -301,3 +315,11 @@ def setup_cron_jobs():
     # Weekly stats — every Sunday at 23:55 Kyiv
     s.add_job(weekly_stats_job, "cron", day_of_week="sun", hour=23, minute=55,
               id="weekly_stats", replace_existing=True)
+
+    # Home order: nightly decay Tue-Sun at 01:00 Kyiv
+    s.add_job(home_decay_job, "cron", day_of_week="tue-sun", hour=1, minute=0,
+              id="home_decay", replace_existing=True)
+
+    # Home order: Monday reset at 00:05 Kyiv (weekend chaos = 20%)
+    s.add_job(home_weekly_reset_job, "cron", day_of_week="mon", hour=0, minute=5,
+              id="home_weekly_reset", replace_existing=True)

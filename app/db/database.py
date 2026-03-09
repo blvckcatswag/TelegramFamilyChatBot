@@ -196,6 +196,20 @@ async def _run_migrations(db: Database):
         )
     except Exception:
         pass
+    # HomeActions table (added in v3)
+    try:
+        await db.execute_script("""
+            CREATE TABLE IF NOT EXISTS HomeActions (
+                chat_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                action TEXT NOT NULL,
+                date TEXT NOT NULL,
+                PRIMARY KEY (chat_id, user_id, action, date)
+            );
+        """)
+    except Exception:
+        pass
+
     # BlackjackProfile table (added in v2)
     try:
         await db.execute_script("""
@@ -314,6 +328,14 @@ async def _init_postgres(db: Database):
         order_score INTEGER DEFAULT 50,
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         FOREIGN KEY (chat_id) REFERENCES Chat(chat_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS HomeActions (
+        chat_id BIGINT NOT NULL,
+        user_id BIGINT NOT NULL,
+        action TEXT NOT NULL,
+        date TEXT NOT NULL,
+        PRIMARY KEY (chat_id, user_id, action, date)
     );
 
     CREATE TABLE IF NOT EXISTS Duel (
@@ -525,6 +547,14 @@ async def _init_sqlite(db: Database):
         order_score INTEGER DEFAULT 50,
         updated_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (chat_id) REFERENCES Chat(chat_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS HomeActions (
+        chat_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        date TEXT NOT NULL,
+        PRIMARY KEY (chat_id, user_id, action, date)
     );
 
     CREATE TABLE IF NOT EXISTS Duel (
