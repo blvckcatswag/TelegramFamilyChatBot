@@ -36,7 +36,7 @@ from app.config.settings import SUPERADMIN_ID
 from app.db import repositories as repo
 from app.services.games.cactus import play_cactus
 from app.services.games.cat import _send_cat
-from app.services.games.home import cmd_home
+from app.services.games.home import cmd_home, _do_home_action
 from app.services.games.roulette import cmd_roulette
 from app.services.reminders.handler import cmd_remind, cmd_reminders
 from app.services.weather.handler import get_weather_for_chat, WeatherAddCity
@@ -44,7 +44,7 @@ from app.services.awards.handler import cmd_awards
 from app.services.feedback.handler import cmd_feedback
 from app.services.donate.handler import cmd_donate
 from app.utils.reply_keyboards import (
-    kb_start, kb_menu, kb_games, kb_cat, kb_reminders,
+    kb_start, kb_menu, kb_games, kb_cat, kb_home, kb_reminders,
     kb_weather, kb_quotes, kb_stats, kb_help,
 )
 
@@ -236,7 +236,41 @@ async def handle_roulette(message: Message, bot: Bot):
 @router.message(F.text == "🧹 Порядок")
 async def handle_home(message: Message):
     logger.info("Reply KB: 🧹 Порядок — user=%s", message.from_user.id)
+    await message.answer(
+        "🧹 <b>Порядок дома</b>\n\nЧто будем делать?",
+        reply_markup=kb_home(), parse_mode="HTML",
+    )
     await cmd_home(message)
+
+
+@router.message(F.text == "🧹 Подмести")
+async def handle_home_sweep(message: Message):
+    logger.info("Reply KB: 🧹 Подмести — user=%s", message.from_user.id)
+    await _do_home_action(message, "sweep")
+
+
+@router.message(F.text == "🪣 Помыть пол")
+async def handle_home_mop(message: Message):
+    logger.info("Reply KB: 🪣 Помыть пол — user=%s", message.from_user.id)
+    await _do_home_action(message, "mop")
+
+
+@router.message(F.text == "🍽 Помыть посуду")
+async def handle_home_dishes(message: Message):
+    logger.info("Reply KB: 🍽 Помыть посуду — user=%s", message.from_user.id)
+    await _do_home_action(message, "dishes")
+
+
+@router.message(F.text == "🧽 Протереть пыль")
+async def handle_home_dust(message: Message):
+    logger.info("Reply KB: 🧽 Протереть пыль — user=%s", message.from_user.id)
+    await _do_home_action(message, "dust")
+
+
+@router.message(F.text == "🗑 Вынести мусор")
+async def handle_home_trash(message: Message):
+    logger.info("Reply KB: 🗑 Вынести мусор — user=%s", message.from_user.id)
+    await _do_home_action(message, "trash")
 
 
 @router.message(F.text == "🏆 Топ")
