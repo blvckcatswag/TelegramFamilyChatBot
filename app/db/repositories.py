@@ -871,21 +871,21 @@ async def update_blackjack_balance(chat_id: int, user_id: int, delta: int, outco
     return new_balance
 
 
-async def claim_weekly_credits(chat_id: int, user_id: int) -> bool:
-    """Returns True if credits were given, False if already claimed this week."""
+async def claim_weekly_credits(chat_id: int, user_id: int):
+    """Returns True if credits were given, or datetime of next available claim."""
     from app.utils.helpers import now_kyiv
-    from datetime import timedelta
+    from datetime import timedelta, datetime
+    from app.utils.helpers import KYIV_TZ
     db = await get_db()
     profile = await get_blackjack_profile(chat_id, user_id)
     last = profile.get("last_weekly")
     if last:
-        from datetime import datetime
-        from app.utils.helpers import KYIV_TZ
         last_dt = datetime.fromisoformat(last)
         if last_dt.tzinfo is None:
             last_dt = last_dt.replace(tzinfo=KYIV_TZ)
-        if now_kyiv() - last_dt < timedelta(days=7):
-            return False
+        next_dt = last_dt + timedelta(days=7)
+        if now_kyiv() < next_dt:
+            return next_dt
     await db.execute(
         """UPDATE BlackjackProfile SET balance=balance+5000, last_weekly=$1
            WHERE chat_id=$2 AND user_id=$3""",

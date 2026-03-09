@@ -361,12 +361,13 @@ async def cb_stand(callback: CallbackQuery):
 async def cmd_weekly(message: Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    given = await repo.claim_weekly_credits(chat_id, user_id)
-    if given:
+    result = await repo.claim_weekly_credits(chat_id, user_id)
+    if result is True:
         profile = await repo.get_blackjack_profile(chat_id, user_id)
         await message.answer(BJ_WEEKLY_CLAIMED.format(balance=profile["balance"]))
     else:
-        await message.answer(BJ_WEEKLY_COOLDOWN)
+        next_time = result.strftime("%d.%m в %H:%M")
+        await message.answer(BJ_WEEKLY_COOLDOWN.format(next_time=next_time))
 
 
 @router.message(Command("balance"))

@@ -772,10 +772,11 @@ async def test_weekly_credits_given(setup_chat):
 
 @pytest.mark.asyncio
 async def test_weekly_credits_cooldown(setup_chat):
-    """Второй запрос в ту же неделю возвращает False."""
+    """Второй запрос в ту же неделю возвращает datetime следующего получения."""
     await repo.claim_weekly_credits(CHAT_ID, USER_ID_1)
     result = await repo.claim_weekly_credits(CHAT_ID, USER_ID_1)
-    assert result is False
+    from datetime import datetime
+    assert isinstance(result, datetime)
     profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
     assert profile["balance"] == 10000  # не изменился после второго запроса
 
