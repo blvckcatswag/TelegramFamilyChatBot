@@ -934,10 +934,43 @@ async def claim_weekly_credits(chat_id: int, user_id: int):
 async def get_blackjack_top(chat_id: int, limit: int = 5) -> list[dict]:
     db = await get_db()
     return await db.fetch(
-        """SELECT bp.user_id, bp.balance, u.first_name, u.username
+        """SELECT bp.user_id, bp.balance, bp.wins, bp.losses, bp.total_games,
+                  u.first_name, u.username
            FROM BlackjackProfile bp
            JOIN "User" u ON bp.user_id=u.user_id AND bp.chat_id=u.chat_id
            WHERE bp.chat_id=$1
            ORDER BY bp.balance DESC LIMIT $2""",
         chat_id, limit,
     )
+
+
+async def get_blackjack_lenders(chat_id: int, exclude_user_id: int, min_balance: int = 1000) -> list[dict]:
+    """Return users in chat who have enough credits to lend."""
+    db = await get_db()
+    return await db.fetch(
+        """SELECT bp.user_id, bp.balance, u.first_name, u.username
+           FROM BlackjackProfile bp
+           JOIN "User" u ON bp.user_id=u.user_id AND bp.chat_id=u.chat_id
+           WHERE bp.chat_id=$1 AND bp.user_id != $2 AND bp.balance >= $3
+           ORDER BY bp.balance DESC LIMIT 8""",
+        chat_id, exclude_user_id, min_balance,
+    )
+
+
+async def transfer_blackjack_credits(chat_id: int, from_user_id: int, to_user_id: int, amount: int) -> bool:
+    """Transfer credits from lender to borrower. Returns False if lender has insufficient funds."""
+    db = await get_db()
+    lender = await get_blackjack_profile(chat_id, from_user_id)
+    if lender["balance"] < amount:
+        return False
+    await db.execute(
+        "UPDATE BlackjackProfile SET balance=balance-$1 WHERE chat_id=$2 AND user_id=$3",
+        amount, chat_id, from_user_id,
+    )
+    await db.execute(
+        """INSERT INTO BlackjackProfile(chat_id, user_id, balance)
+           VALUES($1, $2, $3)
+           ON CONFLICT(chat_id, user_id) DO UPDATE SET balance=BlackjackProfile.balance+$3""",
+        chat_id, to_user_id, amount,
+    )
+    return True
