@@ -113,7 +113,7 @@ async def _build_cactus_response(chat_id: int, user_id: int, bot: Bot) -> str:
 
 
 async def play_cactus(message: Message, bot: Bot):
-    """Command / reply-keyboard path: edit previous message or send new."""
+    """Command / reply-keyboard path: delete previous message, send new."""
     chat_id = message.chat.id
     user_id = message.from_user.id
     text = await _build_cactus_response(chat_id, user_id, bot)
@@ -122,8 +122,7 @@ async def play_cactus(message: Message, bot: Bot):
     prev_id = _last_cactus_msg.get(key)
     if prev_id:
         try:
-            await bot.edit_message_text(text, chat_id=chat_id, message_id=prev_id)
-            return
+            await bot.delete_message(chat_id, prev_id)
         except Exception:
             pass
     sent = await message.answer(text)

@@ -213,3 +213,5 @@ bot.db-wal
 .claude/
 CLAUDE.md
 TODO.txt
+BUGS.txt
+*.docx

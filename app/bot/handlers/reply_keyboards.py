@@ -34,6 +34,7 @@ class _DeleteTriggerMiddleware(BaseMiddleware):
 from app.bot.keyboards import settings_kb, weather_cities_delete_kb
 from app.config.settings import SUPERADMIN_ID
 from app.db import repositories as repo
+from app.services.games.blackjack import cmd_blackjack
 from app.services.games.cactus import play_cactus
 from app.services.games.cat import _send_cat
 from app.services.games.home import cmd_home, _do_home_action
@@ -231,6 +232,12 @@ async def handle_duel(message: Message):
 async def handle_roulette(message: Message, bot: Bot):
     logger.info("Reply KB: 🔫 Рулетка — user=%s", message.from_user.id)
     await cmd_roulette(message, bot)
+
+
+@router.message(F.text == "🃏 Блэкджек")
+async def handle_blackjack(message: Message, bot: Bot):
+    logger.info("Reply KB: 🃏 Блэкджек — user=%s", message.from_user.id)
+    await cmd_blackjack(message, bot)
 
 
 @router.message(F.text == "🧹 Порядок")

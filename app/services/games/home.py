@@ -92,8 +92,11 @@ async def _do_home_action(message: Message, action: str) -> None:
             f"{HOME_ACTIONS[k][0]} {HOME_ACTIONS[k][1]}"
             for k in HOME_ACTIONS if k not in done_today
         ]
-        suggestion = random.choice(not_done) if not_done else "отдохнуть"
-        await message.answer(HOME_ALREADY_DONE.format(suggestion=suggestion))
+        if not_done:
+            suggestion = random.choice(not_done)
+            await message.answer(HOME_ALREADY_DONE.format(suggestion=suggestion))
+        else:
+            await _send_or_edit(chat_id, message, HOME_ALL_DONE + "\n\n" + _build_status(order, done_today))
         return
 
     n = random.randint(5, 20)
