@@ -19,6 +19,7 @@ from app.services.games.cat import router as cat_router
 from app.services.games.duel import router as duel_router
 from app.services.games.roulette import router as roulette_router
 from app.services.games.blackjack import router as blackjack_router
+from app.services.games.home import router as home_router
 from app.services.reminders.handler import router as reminders_router
 from app.services.weather.handler import router as weather_router
 from app.services.quotes.handler import router as quotes_router
@@ -113,6 +114,7 @@ async def main():
     dp.include_router(duel_router)
     dp.include_router(roulette_router)
     dp.include_router(blackjack_router)
+    dp.include_router(home_router)
     dp.include_router(reminders_router)
     dp.include_router(weather_router)
     dp.include_router(quotes_router)

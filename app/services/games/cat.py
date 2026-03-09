@@ -5,10 +5,9 @@ from aiogram.types import Message, CallbackQuery
 from app.db import repositories as repo
 from app.config import settings as cfg
 from app.utils.helpers import today_str, progress_bar, safe_edit_text
-from app.bot.keyboards import back_to_menu_kb
 from app.texts import (
     CAT_NEUTRAL, CAT_NEGATIVE, CAT_EASTER_EGG,
-    HOME_ORDER_MIN_COMMENT, HOME_ORDER_MAX_COMMENT, GAMES_DISABLED,
+    GAMES_DISABLED,
     CAT_FEED_DONE, CAT_PET_DONE, CAT_PLAY_DONE,
     CAT_FEED_COOLDOWN, CAT_PET_COOLDOWN, CAT_PLAY_COOLDOWN,
     CAT_LOW_AFFINITY_EVENTS,
@@ -194,37 +193,3 @@ async def cb_cat_play(callback: CallbackQuery, bot: Bot):
     await _edit_cat(callback, bot, "play")
 
 
-# ── Home order ────────────────────────────────────────────────────────
-
-@router.message(Command("home"))
-async def cmd_home(message: Message):
-    chat_id = message.chat.id
-    order = await repo.get_home_order(chat_id)
-    bar = progress_bar(order)
-
-    extra = ""
-    if order == 0:
-        extra = HOME_ORDER_MIN_COMMENT
-    elif order == 100:
-        extra = HOME_ORDER_MAX_COMMENT
-
-    await message.answer(f"🧹 <b>Порядок дома</b>\n\n{bar}{extra}", parse_mode="HTML")
-
-
-@router.callback_query(F.data == "game:home")
-async def cb_home(callback: CallbackQuery):
-    chat_id = callback.message.chat.id
-    order = await repo.get_home_order(chat_id)
-    bar = progress_bar(order)
-
-    extra = ""
-    if order == 0:
-        extra = HOME_ORDER_MIN_COMMENT
-    elif order == 100:
-        extra = HOME_ORDER_MAX_COMMENT
-
-    await safe_edit_text(callback.message,
-        f"🧹 <b>Порядок дома</b>\n\n{bar}{extra}",
-        reply_markup=back_to_menu_kb(), parse_mode="HTML",
-    )
-    await callback.answer()

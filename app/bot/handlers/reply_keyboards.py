@@ -35,7 +35,8 @@ from app.bot.keyboards import settings_kb, weather_cities_delete_kb
 from app.config.settings import SUPERADMIN_ID
 from app.db import repositories as repo
 from app.services.games.cactus import play_cactus
-from app.services.games.cat import cmd_home, _send_cat
+from app.services.games.cat import _send_cat
+from app.services.games.home import cmd_home
 from app.services.games.roulette import cmd_roulette
 from app.services.reminders.handler import cmd_remind, cmd_reminders
 from app.services.weather.handler import get_weather_for_chat, WeatherAddCity

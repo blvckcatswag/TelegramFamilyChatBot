@@ -444,6 +444,43 @@ async def update_home_order(chat_id: int, delta: int) -> int:
     return new_val
 
 
+async def get_home_actions_today(chat_id: int, user_id: int, date: str) -> set[str]:
+    db = await get_db()
+    rows = await db.fetch(
+        "SELECT action FROM HomeActions WHERE chat_id=$1 AND user_id=$2 AND date=$3",
+        chat_id, user_id, date,
+    )
+    return {r["action"] for r in rows}
+
+
+async def add_home_action(chat_id: int, user_id: int, action: str, date: str) -> None:
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO HomeActions (chat_id, user_id, action, date) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+        chat_id, user_id, action, date,
+    )
+
+
+async def decay_home_orders(min_decay: int = 20, max_decay: int = 60) -> None:
+    """Randomly decrease all HomeOrder records. Called nightly by scheduler."""
+    import random
+    db = await get_db()
+    rows = await db.fetch("SELECT chat_id, order_score FROM HomeOrder")
+    for row in rows:
+        delta = random.randint(min_decay, max_decay)
+        new_score = max(0, row["order_score"] - delta)
+        await db.execute(
+            "UPDATE HomeOrder SET order_score=$1 WHERE chat_id=$2",
+            new_score, row["chat_id"],
+        )
+
+
+async def reset_home_orders(score: int = 20) -> None:
+    """Set all HomeOrder records to score. Called weekly (Monday) by scheduler."""
+    db = await get_db()
+    await db.execute("UPDATE HomeOrder SET order_score=$1", score)
+
+
 # ──────────────────── Duel ────────────────────
 
 async def create_duel(chat_id: int, challenger_id: int, opponent_id: int,
