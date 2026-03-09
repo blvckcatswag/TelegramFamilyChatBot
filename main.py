@@ -73,6 +73,7 @@ BOT_COMMANDS = [
     BotCommand(command="blackjack", description="Блэкджек"),
     BotCommand(command="weekly", description="Недельные кредиты"),
     BotCommand(command="balance", description="Баланс кредитов"),
+    BotCommand(command="top_blackjack", description="Топ игроков по кредитам"),
     BotCommand(command="remind", description="Создать напоминание"),
     BotCommand(command="reminders", description="Мои напоминания"),
     BotCommand(command="weather", description="Погода сейчас"),
