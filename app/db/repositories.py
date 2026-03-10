@@ -872,6 +872,32 @@ async def get_feedback_by_id(feedback_id: int) -> dict | None:
     return await db.fetchrow("SELECT * FROM Feedback WHERE id=$1", feedback_id)
 
 
+async def get_all_feedback(
+    status: str | None = None,
+    category: str | None = None,
+) -> list[dict]:
+    """Fetch feedback with optional filters. No filter = all records."""
+    db = await get_db()
+    conditions = []
+    args = []
+    idx = 1
+
+    if status:
+        conditions.append(f"status=${idx}")
+        args.append(status)
+        idx += 1
+    if category:
+        conditions.append(f"category=${idx}")
+        args.append(category)
+        idx += 1
+
+    where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+    return await db.fetch(
+        f"SELECT * FROM Feedback{where} ORDER BY created_at DESC",
+        *args,
+    )
+
+
 # ──────────────────── Blackjack ────────────────────
 
 async def get_blackjack_profile(chat_id: int, user_id: int) -> dict:
