@@ -377,7 +377,7 @@ async def cmd_roulette(message: Message, bot: Bot):
     game.add_player(user_id, message.from_user.first_name)
     _games[chat_id] = game
 
-    await _edit_msg(game, _collecting_text(game), _join_kb())
+    await _edit_or_send(game, _collecting_text(game), _join_kb())
     game._task = asyncio.create_task(_collection_timeout(game))
 
 
@@ -459,7 +459,39 @@ async def cb_shoot(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "game:roulette")
-async def cb_roulette_info(callback: CallbackQuery):
+async def cb_roulette_info(callback: CallbackQuery, bot: Bot):
+    chat_id = callback.message.chat.id
+    user_id = callback.from_user.id
+    game = _games.get(chat_id)
+
+    # If a game is collecting — auto-join via menu click
+    if game and game.phase == "collecting":
+        if any(p["id"] == user_id for p in game.players):
+            await callback.answer("🔫 Ты уже в игре, жди остальных!", show_alert=True)
+            return
+        try:
+            await repo.get_or_create_user(
+                user_id, chat_id, callback.from_user.username,
+                callback.from_user.first_name,
+            )
+            game.add_player(user_id, callback.from_user.first_name)
+            await _edit_or_send(game, _collecting_text(game), _join_kb())
+            await callback.answer("✅ Ты в игре!")
+        except Exception as e:
+            logger.error("Error joining roulette via menu chat=%s user=%s: %s", chat_id, user_id, e)
+            await callback.answer("Ошибка, попробуй ещё раз.", show_alert=True)
+            return
+
+        if len(game.players) >= 6:
+            game.cancel_task()
+            game.start_playing()
+            await _next_turn(game)
+        return
+
+    if game and game.phase == "playing":
+        await callback.answer("🔫 Рулетка уже в процессе, жди следующего раунда.", show_alert=True)
+        return
+
     try:
         await callback.message.edit_text(
             "🔫 <b>Русская рулетка</b>\n\n"

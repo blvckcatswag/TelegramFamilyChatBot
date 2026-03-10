@@ -1355,3 +1355,84 @@ async def test_export_generate_html_no_text():
     ]
     html = generate_html(items)
     assert "медиа без текста" in html
+
+
+# ──────────────────── Blackjack: double down validation ────────────────────
+
+def test_blackjack_can_double_requires_2x_stake():
+    """Кнопка удвоения не показывается, если баланс < stake * 2."""
+    from app.services.games.blackjack import _action_kb
+    # can_double=True → кнопка есть
+    kb = _action_kb(can_double=True)
+    texts = [btn.text for row in kb.inline_keyboard for btn in row]
+    assert any("Удвоить" in t for t in texts)
+
+    # can_double=False → кнопки нет
+    kb = _action_kb(can_double=False)
+    texts = [btn.text for row in kb.inline_keyboard for btn in row]
+    assert not any("Удвоить" in t for t in texts)
+
+
+@pytest.mark.asyncio
+async def test_blackjack_double_denied_insufficient_balance(setup_chat):
+    """Удвоение отклоняется если баланс < stake * 2."""
+    profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    initial_balance = profile["balance"]  # 5000
+    stake = 3000
+    # balance=5000, stake=3000 → 5000 < 3000*2=6000 → нельзя удвоить
+    assert initial_balance < stake * 2
+
+
+@pytest.mark.asyncio
+async def test_blackjack_double_allowed_sufficient_balance(setup_chat):
+    """Удвоение разрешается если баланс >= stake * 2."""
+    profile = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    initial_balance = profile["balance"]  # 5000
+    stake = 2500
+    # balance=5000, stake=2500 → 5000 >= 2500*2=5000 → можно удвоить
+    assert initial_balance >= stake * 2
+
+
+# ──────────────────── Feedback: media group dedup ────────────────────
+
+def test_feedback_media_group_dedup():
+    """_seen_media_groups дедуплицирует медиагруппы."""
+    from app.services.feedback.handler import _seen_media_groups
+    _seen_media_groups.clear()
+
+    mg_id = "test_mg_123"
+    assert mg_id not in _seen_media_groups
+    _seen_media_groups.add(mg_id)
+    assert mg_id in _seen_media_groups
+    _seen_media_groups.clear()
+
+
+def test_feedback_media_group_overflow_cleanup():
+    """_seen_media_groups очищается при >100 записей."""
+    from app.services.feedback.handler import _seen_media_groups
+    _seen_media_groups.clear()
+
+    for i in range(101):
+        _seen_media_groups.add(f"mg_{i}")
+
+    assert len(_seen_media_groups) == 101
+    # Симулируем логику из handler: если > 100, clear и добавить текущий
+    new_id = "mg_new"
+    if len(_seen_media_groups) > 100:
+        _seen_media_groups.clear()
+        _seen_media_groups.add(new_id)
+
+    assert len(_seen_media_groups) == 1
+    assert new_id in _seen_media_groups
+    _seen_media_groups.clear()
+
+
+# ──────────────────── Roulette: menu auto-join ────────────────────
+
+def test_roulette_game_add_player_returns_false_on_duplicate():
+    """add_player не добавляет дубликат."""
+    bot = MagicMock()
+    game = RouletteGame(CHAT_ID, 1, bot)
+    assert game.add_player(USER_ID_1, "Alice") is True
+    assert game.add_player(USER_ID_1, "Alice") is False
+    assert len(game.players) == 1

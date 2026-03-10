@@ -139,6 +139,7 @@ async def main():
     if cfg.SUPERADMIN_ID:
         superadmin_commands = BOT_COMMANDS + [
             BotCommand(command="backlog", description="Беклог обращений"),
+            BotCommand(command="export_bugs", description="Экспорт фидбека в HTML"),
         ]
         await bot.set_my_commands(superadmin_commands, scope=BotCommandScopeChat(chat_id=cfg.SUPERADMIN_ID))
     logger.info("Bot commands registered.")
