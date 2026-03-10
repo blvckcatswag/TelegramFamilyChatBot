@@ -1234,3 +1234,124 @@ async def test_roulette_last_time_with_many_games(setup_chat):
     await repo.create_roulette(CHAT_ID, json.dumps([USER_ID_1, USER_ID_2]), USER_ID_1)
     last = await repo.get_last_roulette_time(CHAT_ID, USER_ID_2)
     assert last is not None
+
+
+# ──────────────────── Export Bugs ────────────────────
+
+from app.services.feedback.export import generate_html
+
+
+@pytest.mark.asyncio
+async def test_export_generate_html_empty():
+    html = generate_html([])
+    assert "Обращений не найдено" in html
+    assert "<!DOCTYPE html>" in html
+
+
+@pytest.mark.asyncio
+async def test_export_generate_html_with_items():
+    items = [
+        {"id": 1, "user_id": 111, "chat_id": -100, "username": "alice",
+         "category": "bug", "text": "Кнопка не работает", "status": "open",
+         "created_at": "2026-03-10T12:00:00"},
+        {"id": 2, "user_id": 222, "chat_id": -100, "username": None,
+         "category": "idea", "text": "Добавить спидтест", "status": "done",
+         "created_at": "2026-03-09T10:00:00"},
+    ]
+    html = generate_html(items)
+    assert "Кнопка не работает" in html
+    assert "@alice" in html
+    assert "id222" in html
+    assert "🐛" in html
+    assert "💡" in html
+    assert "открыто" in html
+    assert "закрыто" in html
+
+
+@pytest.mark.asyncio
+async def test_export_generate_html_escapes_xss():
+    items = [
+        {"id": 1, "user_id": 111, "chat_id": -100, "username": "<script>alert(1)</script>",
+         "category": "bug", "text": "<b>bold</b>", "status": "open",
+         "created_at": None},
+    ]
+    html = generate_html(items)
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
+    assert "&lt;b&gt;bold&lt;/b&gt;" in html
+
+
+@pytest.mark.asyncio
+async def test_export_generate_html_stats():
+    items = [
+        {"id": i, "user_id": 111, "chat_id": -100, "username": "u",
+         "category": cat, "text": "t", "status": st,
+         "created_at": "2026-03-10T12:00:00"}
+        for i, (cat, st) in enumerate([
+            ("bug", "open"), ("bug", "open"), ("idea", "done"), ("complaint", "open"),
+        ])
+    ]
+    html = generate_html(items)
+    # Stats: 4 total, 3 open, 1 done
+    assert ">4<" in html
+    assert ">3<" in html
+    assert ">1<" in html
+
+
+@pytest.mark.asyncio
+async def test_get_all_feedback_no_filter(setup_chat):
+    await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "bug", "баг раз")
+    await repo.create_feedback(USER_ID_2, CHAT_ID, "user2", "idea", "идея")
+
+    items = await repo.get_all_feedback()
+    assert len(items) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_all_feedback_status_filter(setup_chat):
+    fid = await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "bug", "баг")
+    await repo.create_feedback(USER_ID_2, CHAT_ID, "user2", "idea", "идея")
+    await repo.close_feedback(fid)
+
+    open_items = await repo.get_all_feedback(status="open")
+    assert len(open_items) == 1
+    assert open_items[0]["category"] == "idea"
+
+    done_items = await repo.get_all_feedback(status="done")
+    assert len(done_items) == 1
+    assert done_items[0]["category"] == "bug"
+
+
+@pytest.mark.asyncio
+async def test_get_all_feedback_category_filter(setup_chat):
+    await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "bug", "баг")
+    await repo.create_feedback(USER_ID_2, CHAT_ID, "user2", "idea", "идея")
+    await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "bug", "ещё баг")
+
+    bugs = await repo.get_all_feedback(category="bug")
+    assert len(bugs) == 2
+    assert all(b["category"] == "bug" for b in bugs)
+
+
+@pytest.mark.asyncio
+async def test_get_all_feedback_combined_filter(setup_chat):
+    fid = await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "bug", "закрытый баг")
+    await repo.create_feedback(USER_ID_2, CHAT_ID, "user2", "bug", "открытый баг")
+    await repo.create_feedback(USER_ID_1, CHAT_ID, "user1", "idea", "открытая идея")
+    await repo.close_feedback(fid)
+
+    items = await repo.get_all_feedback(status="open", category="bug")
+    assert len(items) == 1
+    assert items[0]["text"] == "открытый баг"
+
+
+@pytest.mark.asyncio
+async def test_export_generate_html_no_text():
+    """Media-only feedback (text=None) should show placeholder."""
+    items = [
+        {"id": 1, "user_id": 111, "chat_id": -100, "username": "u",
+         "category": "bug", "text": None, "status": "open",
+         "created_at": "2026-03-10T12:00:00"},
+    ]
+    html = generate_html(items)
+    assert "медиа без текста" in html

@@ -29,6 +29,7 @@ from app.services.reactions.handler import router as reactions_router
 from app.services.awards.handler import router as awards_router
 from app.services.admin.handler import router as admin_router
 from app.services.feedback.handler import router as feedback_router
+from app.services.feedback.export import router as feedback_export_router
 from app.services.donate.handler import router as donate_router
 from app.bot.handlers.reply_keyboards import router as reply_kb_router
 from app.scheduler.jobs import get_scheduler, set_bot, setup_cron_jobs, restore_reminders
@@ -123,6 +124,7 @@ async def main():
     dp.include_router(reactions_router)
     dp.include_router(awards_router)
     dp.include_router(feedback_router)
+    dp.include_router(feedback_export_router)
     dp.include_router(donate_router)
     # Translator must be last — it catches all text messages
     dp.include_router(translator_router)
