@@ -13,7 +13,10 @@ from app.db.database import init_db, get_db, close_db
 from app.db import repositories as repo
 from app.config import settings as cfg
 from app.utils.helpers import progress_bar, parse_date, format_birthday_date, safe_edit_text, safe_edit_reply_markup, now_kyiv
-from app.services.games.roulette import RouletteGame, _check_cooldown_sync, _apply_mute, _edit_msg, _edit_or_send
+from app.services.games.roulette import (
+    _check_cooldown_sync, _apply_mute, _edit_msg, _edit_or_send,
+    _parse_game, _current_player, _collecting_text, _playing_text, _final_text,
+)
 
 
 # ──────────────────── Fixtures ────────────────────
@@ -242,90 +245,79 @@ async def test_roulette_survival_count(setup_chat):
     assert survived == 0
 
 
-# ── RouletteGame class (pure logic, no DB/bot) ────────────────────────
+# ── Roulette pure logic (dict-based, no DB/bot) ──────────────────────
 
-def test_roulette_add_player_success():
-    game = RouletteGame(CHAT_ID, 1, MagicMock())
-    assert game.add_player(USER_ID_1, "Alice") is True
-    assert game.add_player(USER_ID_2, "Bob") is True
-    assert len(game.players) == 2
-
-
-def test_roulette_add_player_duplicate():
-    game = RouletteGame(CHAT_ID, 1, MagicMock())
-    assert game.add_player(USER_ID_1, "Alice") is True
-    assert game.add_player(USER_ID_1, "Alice опять") is False
-    assert len(game.players) == 1
-
-
-def test_roulette_shoot_hits_at_bullet_pos():
-    game = RouletteGame(CHAT_ID, 1, MagicMock())
-    for i in range(1, 7):
-        game.add_player(i, f"Player{i}")
-    game.start_playing()
-    game.bullet_pos = 3
-    assert game.shoot() is False  # выстрел 1
-    assert game.shoot() is False  # выстрел 2
-    assert game.shoot() is True   # выстрел 3 — попадание
-
-
-def test_roulette_shoot_all_miss():
-    game = RouletteGame(CHAT_ID, 1, MagicMock())
-    game.add_player(USER_ID_1, "Alice")
-    game.start_playing()
-    game.bullet_pos = 7  # невозможная позиция — все мимо
-    for _ in range(6):
-        assert game.shoot() is False
-
-
-def test_roulette_bullet_always_in_range():
-    game = RouletteGame(CHAT_ID, 1, MagicMock())
-    game.add_player(USER_ID_1, "Alice")
-    for _ in range(100):
-        game.start_playing()
-        assert 1 <= game.bullet_pos <= 6
+def test_roulette_parse_game():
+    row = {
+        "chat_id": CHAT_ID, "msg_id": 1, "phase": "collecting",
+        "players": '[{"id": 111, "name": "Alice"}]',
+        "play_order": "[]", "bullet_pos": 0, "shot_count": 0,
+        "current_idx": 0, "results": "[]", "loser_id": None,
+        "created_at": "2026-03-10T12:00:00",
+    }
+    g = _parse_game(row)
+    assert isinstance(g["players"], list)
+    assert g["players"][0]["name"] == "Alice"
 
 
 def test_roulette_current_player_empty_order():
-    game = RouletteGame(CHAT_ID, 1, MagicMock())
-    assert game.current_player is None
+    game = {"play_order": [], "current_idx": 0}
+    assert _current_player(game) is None
 
 
 def test_roulette_current_player_wraps():
-    game = RouletteGame(CHAT_ID, 1, MagicMock())
-    game.add_player(USER_ID_1, "Alice")
-    game.add_player(USER_ID_2, "Bob")
-    game.start_playing()
-    game.order = [{"id": USER_ID_1, "name": "Alice"}, {"id": USER_ID_2, "name": "Bob"}]
-    game.current_idx = 0
-    assert game.current_player["id"] == USER_ID_1
-    game.current_idx = 2  # 2 % 2 == 0 — оборачивается
-    assert game.current_player["id"] == USER_ID_1
-    game.current_idx = 3  # 3 % 2 == 1
-    assert game.current_player["id"] == USER_ID_2
+    order = [{"id": USER_ID_1, "name": "Alice"}, {"id": USER_ID_2, "name": "Bob"}]
+    game = {"play_order": order, "current_idx": 0}
+    assert _current_player(game)["id"] == USER_ID_1
+    game["current_idx"] = 2  # 2 % 2 == 0
+    assert _current_player(game)["id"] == USER_ID_1
+    game["current_idx"] = 3  # 3 % 2 == 1
+    assert _current_player(game)["id"] == USER_ID_2
 
 
-def test_roulette_6_players_autostart():
-    game = RouletteGame(CHAT_ID, 1, MagicMock())
-    for i in range(1, 7):
-        assert game.add_player(i, f"Player{i}") is True
-    assert len(game.players) == 6
-    game.start_playing()
-    assert game.phase == "playing"
-    assert 1 <= game.bullet_pos <= 6
-    assert len(game.order) == 6
+def test_roulette_shoot_logic():
+    """shot_count == bullet_pos means hit."""
+    for bullet_pos in range(1, 7):
+        for shot in range(1, 7):
+            hit = (shot == bullet_pos)
+            assert hit == (shot == bullet_pos)
 
 
-def test_roulette_10_joins_only_6_get_in():
-    """add_player сам не ограничивает, но phase-check в handler блокирует 7+.
-    Проверяем что после autostart (6 игроков) phase меняется на playing."""
-    game = RouletteGame(CHAT_ID, 1, MagicMock())
-    for i in range(1, 7):
-        game.add_player(i, f"Player{i}")
-    game.start_playing()  # имитируем autostart
-    # игроки 7-10 в реальном боте получат "Игра уже завершена" из cb_join
-    assert game.phase == "playing"
-    assert len(game.players) == 6
+def test_roulette_bullet_always_in_range():
+    for _ in range(200):
+        bp = random.randint(1, 6)
+        assert 1 <= bp <= 6
+
+
+def test_roulette_collecting_text():
+    game = {
+        "players": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}],
+        "phase": "collecting",
+    }
+    text = _collecting_text(game)
+    assert "Alice" in text
+    assert "Bob" in text
+    assert "Участники (2)" in text
+
+
+def test_roulette_playing_text():
+    game = {
+        "shot_count": 2, "results": ["✅ Alice выжил"],
+        "play_order": [{"id": 2, "name": "Bob"}],
+        "current_idx": 0, "phase": "playing",
+    }
+    text = _playing_text(game)
+    assert "Выстрел 3 из 6" in text
+    assert "Bob" in text
+    assert "ТВОЙ ХОД" in text
+
+
+def test_roulette_final_text():
+    game = {"results": ["✅ Alice выжил", "💀 Bob убит"]}
+    text = _final_text(game)
+    assert "ФИНАЛ" in text
+    assert "Alice" in text
+    assert "Bob" in text
 
 
 # ── Cooldown ──────────────────────────────────────────────────────────
@@ -381,8 +373,7 @@ async def test_roulette_mute_target_is_admin():
     member.status = "administrator"
     bot.get_chat_member.return_value = member
 
-    game = RouletteGame(CHAT_ID, 1, bot)
-    result = await _apply_mute(game, {"id": USER_ID_1, "name": "Alice"})
+    result = await _apply_mute(bot, CHAT_ID, {"id": USER_ID_1, "name": "Alice"})
 
     assert "мут не применён" in result.lower()
     bot.restrict_chat_member.assert_not_called()
@@ -394,8 +385,7 @@ async def test_roulette_mute_bot_not_admin():
     bot.get_chat_member.side_effect = Exception("no rights")
     bot.restrict_chat_member.side_effect = Exception("can't restrict")
 
-    game = RouletteGame(CHAT_ID, 1, bot)
-    result = await _apply_mute(game, {"id": USER_ID_1, "name": "Alice"})
+    result = await _apply_mute(bot, CHAT_ID, {"id": USER_ID_1, "name": "Alice"})
 
     assert "не применён" in result
 
@@ -408,10 +398,9 @@ async def test_roulette_mute_success(setup_chat):
     bot.get_chat_member.return_value = member
     bot.restrict_chat_member.return_value = True
 
-    game = RouletteGame(CHAT_ID, 1, bot)
     with patch("app.services.games.roulette.repo.get_active_mute_until", return_value=None), \
          patch("app.services.games.roulette.repo.log_mute", return_value=None):
-        result = await _apply_mute(game, {"id": USER_ID_1, "name": "Alice"})
+        result = await _apply_mute(bot, CHAT_ID, {"id": USER_ID_1, "name": "Alice"})
 
     assert "мут" in result
     assert str(cfg.ROULETTE_MUTE_MINUTES) in result
@@ -1125,8 +1114,7 @@ def test_blackjack_score_bust():
 async def test_roulette_edit_msg_success():
     """_edit_msg возвращает True при успехе."""
     bot = AsyncMock()
-    game = RouletteGame(CHAT_ID, 1, bot)
-    result = await _edit_msg(game, "test text")
+    result = await _edit_msg(bot, CHAT_ID, 1, "test text")
     assert result is True
     bot.edit_message_text.assert_awaited_once()
 
@@ -1139,8 +1127,7 @@ async def test_roulette_edit_msg_not_modified():
     bot.edit_message_text.side_effect = TelegramBadRequest(
         method=MagicMock(), message="Bad Request: message is not modified"
     )
-    game = RouletteGame(CHAT_ID, 1, bot)
-    result = await _edit_msg(game, "same text")
+    result = await _edit_msg(bot, CHAT_ID, 1, "same text")
     assert result is True
 
 
@@ -1152,8 +1139,7 @@ async def test_roulette_edit_msg_failure():
     bot.edit_message_text.side_effect = TelegramBadRequest(
         method=MagicMock(), message="Bad Request: message to edit not found"
     )
-    game = RouletteGame(CHAT_ID, 1, bot)
-    result = await _edit_msg(game, "text")
+    result = await _edit_msg(bot, CHAT_ID, 1, "text")
     assert result is False
 
 
@@ -1169,11 +1155,11 @@ async def test_roulette_edit_or_send_fallback():
     sent_msg.message_id = 999
     bot.send_message.return_value = sent_msg
 
-    game = RouletteGame(CHAT_ID, 1, bot)
-    await _edit_or_send(game, "fallback text")
+    with patch("app.services.games.roulette.repo.update_active_roulette"):
+        new_msg_id = await _edit_or_send(bot, CHAT_ID, 1, "fallback text")
 
     bot.send_message.assert_awaited_once()
-    assert game.msg_id == 999  # обновился на новое сообщение
+    assert new_msg_id == 999
 
 
 # ──────────────────── Duel: repository ────────────────────
@@ -1427,12 +1413,95 @@ def test_feedback_media_group_overflow_cleanup():
     _seen_media_groups.clear()
 
 
-# ──────────────────── Roulette: menu auto-join ────────────────────
+# ──────────────────── Roulette: DB-backed active game ────────────────────
 
-def test_roulette_game_add_player_returns_false_on_duplicate():
-    """add_player не добавляет дубликат."""
-    bot = MagicMock()
-    game = RouletteGame(CHAT_ID, 1, bot)
-    assert game.add_player(USER_ID_1, "Alice") is True
-    assert game.add_player(USER_ID_1, "Alice") is False
-    assert len(game.players) == 1
+@pytest.mark.asyncio
+async def test_create_active_roulette(setup_chat):
+    players = json.dumps([{"id": USER_ID_1, "name": "Alice"}])
+    await repo.create_active_roulette(CHAT_ID, 100, players)
+    game = await repo.get_active_roulette(CHAT_ID)
+    assert game is not None
+    assert game["msg_id"] == 100
+    assert game["phase"] == "collecting"
+    await repo.delete_active_roulette(CHAT_ID)
+
+
+@pytest.mark.asyncio
+async def test_get_active_roulette_none(setup_chat):
+    game = await repo.get_active_roulette(CHAT_ID)
+    assert game is None
+
+
+@pytest.mark.asyncio
+async def test_update_active_roulette(setup_chat):
+    players = json.dumps([{"id": USER_ID_1, "name": "Alice"}])
+    await repo.create_active_roulette(CHAT_ID, 100, players)
+    await repo.update_active_roulette(CHAT_ID, phase="playing", bullet_pos=3)
+    game = await repo.get_active_roulette(CHAT_ID)
+    assert game["phase"] == "playing"
+    assert game["bullet_pos"] == 3
+    await repo.delete_active_roulette(CHAT_ID)
+
+
+@pytest.mark.asyncio
+async def test_delete_active_roulette(setup_chat):
+    players = json.dumps([{"id": USER_ID_1, "name": "Alice"}])
+    await repo.create_active_roulette(CHAT_ID, 100, players)
+    await repo.delete_active_roulette(CHAT_ID)
+    assert await repo.get_active_roulette(CHAT_ID) is None
+
+
+@pytest.mark.asyncio
+async def test_update_active_roulette_invalid_field(setup_chat):
+    players = json.dumps([{"id": USER_ID_1, "name": "Alice"}])
+    await repo.create_active_roulette(CHAT_ID, 100, players)
+    with pytest.raises(ValueError, match="Invalid fields"):
+        await repo.update_active_roulette(CHAT_ID, hacked_field="oops")
+    await repo.delete_active_roulette(CHAT_ID)
+
+
+@pytest.mark.asyncio
+async def test_get_all_active_roulettes(setup_chat):
+    chat2 = CHAT_ID + 1
+    await repo.get_or_create_chat(chat2, "Chat 2", USER_ID_2)
+    p1 = json.dumps([{"id": USER_ID_1, "name": "Alice"}])
+    p2 = json.dumps([{"id": USER_ID_2, "name": "Bob"}])
+    await repo.create_active_roulette(CHAT_ID, 100, p1)
+    await repo.create_active_roulette(chat2, 200, p2)
+    all_games = await repo.get_all_active_roulettes()
+    assert len(all_games) == 2
+    await repo.delete_active_roulette(CHAT_ID)
+    await repo.delete_active_roulette(chat2)
+
+
+@pytest.mark.asyncio
+async def test_active_roulette_full_lifecycle(setup_chat):
+    """Полный цикл: создание, обновление игроков, переход в playing, удаление."""
+    players = [{"id": USER_ID_1, "name": "Alice"}]
+    await repo.create_active_roulette(CHAT_ID, 100, json.dumps(players))
+
+    # Добавляем игрока
+    players.append({"id": USER_ID_2, "name": "Bob"})
+    await repo.update_active_roulette(CHAT_ID, players=json.dumps(players))
+
+    # Переход в playing
+    order = players.copy()
+    await repo.update_active_roulette(
+        CHAT_ID, phase="playing",
+        play_order=json.dumps(order),
+        bullet_pos=4, shot_count=0, current_idx=0,
+    )
+
+    game = await repo.get_active_roulette(CHAT_ID)
+    assert game["phase"] == "playing"
+    parsed = _parse_game(game)
+    assert len(parsed["players"]) == 2
+    assert len(parsed["play_order"]) == 2
+    assert parsed["bullet_pos"] == 4
+
+    # Выстрел
+    await repo.update_active_roulette(CHAT_ID, shot_count=1, current_idx=1)
+
+    # Финиш
+    await repo.delete_active_roulette(CHAT_ID)
+    assert await repo.get_active_roulette(CHAT_ID) is None

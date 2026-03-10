@@ -32,7 +32,7 @@ from app.services.feedback.handler import router as feedback_router
 from app.services.feedback.export import router as feedback_export_router
 from app.services.donate.handler import router as donate_router
 from app.bot.handlers.reply_keyboards import router as reply_kb_router
-from app.scheduler.jobs import get_scheduler, set_bot, setup_cron_jobs, restore_reminders
+from app.scheduler.jobs import get_scheduler, set_bot, setup_cron_jobs, restore_reminders, restore_active_roulettes
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -150,6 +150,7 @@ async def main():
     setup_cron_jobs()
     await restore_reminders()
     scheduler.start()
+    await restore_active_roulettes()
     logger.info("Scheduler started.")
 
     # Start polling

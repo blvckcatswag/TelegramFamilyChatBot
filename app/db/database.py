@@ -210,6 +210,26 @@ async def _run_migrations(db: Database):
     except Exception:
         pass
 
+    # RouletteActiveGame table (added in v3)
+    try:
+        await db.execute_script("""
+            CREATE TABLE IF NOT EXISTS RouletteActiveGame (
+                chat_id BIGINT PRIMARY KEY,
+                msg_id BIGINT NOT NULL,
+                phase TEXT NOT NULL DEFAULT 'collecting',
+                players TEXT NOT NULL DEFAULT '[]',
+                play_order TEXT NOT NULL DEFAULT '[]',
+                bullet_pos INTEGER NOT NULL DEFAULT 0,
+                shot_count INTEGER NOT NULL DEFAULT 0,
+                current_idx INTEGER NOT NULL DEFAULT 0,
+                results TEXT NOT NULL DEFAULT '[]',
+                loser_id BIGINT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        """)
+    except Exception:
+        pass
+
     # BlackjackProfile table (added in v2)
     try:
         await db.execute_script("""
@@ -446,6 +466,20 @@ async def _init_postgres(db: Database):
         last_weekly TEXT,
         UNIQUE(chat_id, user_id)
     );
+
+    CREATE TABLE IF NOT EXISTS RouletteActiveGame (
+        chat_id BIGINT PRIMARY KEY,
+        msg_id BIGINT NOT NULL,
+        phase TEXT NOT NULL DEFAULT 'collecting',
+        players TEXT NOT NULL DEFAULT '[]',
+        play_order TEXT NOT NULL DEFAULT '[]',
+        bullet_pos INTEGER NOT NULL DEFAULT 0,
+        shot_count INTEGER NOT NULL DEFAULT 0,
+        current_idx INTEGER NOT NULL DEFAULT 0,
+        results TEXT NOT NULL DEFAULT '[]',
+        loser_id BIGINT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
     """)
 
 
@@ -665,5 +699,19 @@ async def _init_sqlite(db: Database):
         max_balance INTEGER NOT NULL DEFAULT 5000,
         last_weekly TEXT,
         UNIQUE(chat_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS RouletteActiveGame (
+        chat_id INTEGER PRIMARY KEY,
+        msg_id INTEGER NOT NULL,
+        phase TEXT NOT NULL DEFAULT 'collecting',
+        players TEXT NOT NULL DEFAULT '[]',
+        play_order TEXT NOT NULL DEFAULT '[]',
+        bullet_pos INTEGER NOT NULL DEFAULT 0,
+        shot_count INTEGER NOT NULL DEFAULT 0,
+        current_idx INTEGER NOT NULL DEFAULT 0,
+        results TEXT NOT NULL DEFAULT '[]',
+        loser_id INTEGER,
+        created_at TEXT DEFAULT (datetime('now'))
     );
     """)
