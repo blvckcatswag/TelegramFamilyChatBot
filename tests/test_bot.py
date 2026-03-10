@@ -13,7 +13,7 @@ from app.db.database import init_db, get_db, close_db
 from app.db import repositories as repo
 from app.config import settings as cfg
 from app.utils.helpers import progress_bar, parse_date, format_birthday_date, safe_edit_text, safe_edit_reply_markup, now_kyiv
-from app.services.games.roulette import RouletteGame, _check_cooldown_sync, _apply_mute
+from app.services.games.roulette import RouletteGame, _check_cooldown_sync, _apply_mute, _edit_msg, _edit_or_send
 
 
 # ──────────────────── Fixtures ────────────────────
@@ -820,3 +820,417 @@ def test_card_score_ace_adjustment():
     # A + A = 12 (один туз = 11, второй = 1)
     hand3 = ["A♠", "A♥"]
     assert _score(hand3) == 12
+
+
+# ══════════════════════════════════════════════════════════════════════
+# НОВЫЕ ТЕСТЫ — покрытие непокрытых модулей и механик
+# ══════════════════════════════════════════════════════════════════════
+
+
+# ──────────────────── Cactus: overwater mechanic ────────────────────
+
+@pytest.mark.asyncio
+async def test_cactus_overwater_first_is_safe(setup_chat):
+    """Первый полив за день всегда безопасен (шанс перелива 0%)."""
+    from app.services.games.cactus import OVERWATER_CHANCES
+    assert OVERWATER_CHANCES[0] == 0.0
+
+
+def test_cactus_overwater_chances_increasing():
+    """Шансы перелива растут с каждым поливом."""
+    from app.services.games.cactus import OVERWATER_CHANCES
+    for i in range(1, len(OVERWATER_CHANCES)):
+        assert OVERWATER_CHANCES[i] >= OVERWATER_CHANCES[i - 1]
+
+
+def test_cactus_overwater_sixth_is_certain():
+    """6-й+ полив = 100% перелив."""
+    from app.services.games.cactus import OVERWATER_CHANCES
+    assert OVERWATER_CHANCES[-1] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_cactus_waters_today_tracking(setup_chat):
+    """waters_today увеличивается при каждом поливе."""
+    today = date.today().isoformat()
+    await repo.get_cactus(CHAT_ID, USER_ID_1)  # создаёт запись
+    await repo.update_cactus(CHAT_ID, USER_ID_1, 1, today, 1)
+    cactus = await repo.get_cactus(CHAT_ID, USER_ID_1)
+    assert cactus["waters_today"] == 1
+
+    await repo.update_cactus(CHAT_ID, USER_ID_1, 2, today, 2)
+    cactus = await repo.get_cactus(CHAT_ID, USER_ID_1)
+    assert cactus["waters_today"] == 2
+
+
+@pytest.mark.asyncio
+async def test_cactus_reset_on_death(setup_chat):
+    """reset_cactus обнуляет высоту."""
+    today = date.today().isoformat()
+    await repo.update_cactus(CHAT_ID, USER_ID_1, 50, today, 1)
+    await repo.reset_cactus(CHAT_ID, USER_ID_1)
+    cactus = await repo.get_cactus(CHAT_ID, USER_ID_1)
+    assert cactus["height_cm"] == 0
+
+
+def test_cactus_growth_stages():
+    """Стадии роста корректно определяются."""
+    from app.services.games.cactus import _get_stage
+    emoji, name = _get_stage(0)
+    assert "Семечко" in name
+    emoji, name = _get_stage(5)
+    assert "Росток" in name
+    emoji, name = _get_stage(15)
+    assert "Маленький" in name
+    emoji, name = _get_stage(30)
+    assert "Взрослый" in name
+    emoji, name = _get_stage(50)
+    assert "Цветущий" in name
+    emoji, name = _get_stage(100)
+    assert "Легендарный" in name
+
+
+# ──────────────────── Cat: affinity mechanic ────────────────────
+
+def test_cat_affinity_bar():
+    """_affinity_bar возвращает корректные статусы."""
+    from app.services.games.cat import _affinity_bar
+    assert "обожает" in _affinity_bar(80)
+    assert "доверяет" in _affinity_bar(55)
+    assert "привыкает" in _affinity_bar(30)
+    assert "настороженно" in _affinity_bar(19)
+    assert "шипит" in _affinity_bar(10)
+
+
+@pytest.mark.asyncio
+async def test_cat_affinity_stored(setup_chat):
+    """Привязанность сохраняется и читается из БД."""
+    today = date.today().isoformat()
+    await repo.get_cat(CHAT_ID, USER_ID_1)  # создаёт запись
+    await repo.update_cat(CHAT_ID, USER_ID_1, 5, today, affinity=75,
+                          action_field="last_feed_date", actions_today=1)
+    cat = await repo.get_cat(CHAT_ID, USER_ID_1)
+    assert cat["affinity"] == 75
+
+
+@pytest.mark.asyncio
+async def test_cat_affinity_clamped(setup_chat):
+    """Привязанность не уходит выше 100 и ниже 0."""
+    today = date.today().isoformat()
+    await repo.get_cat(CHAT_ID, USER_ID_1)  # создаёт запись
+    await repo.update_cat(CHAT_ID, USER_ID_1, 5, today, affinity=150,
+                          action_field="last_feed_date", actions_today=1)
+    cat = await repo.get_cat(CHAT_ID, USER_ID_1)
+    assert cat["affinity"] == 100
+
+    await repo.update_cat(CHAT_ID, USER_ID_1, 5, today, affinity=-10,
+                          action_field="last_feed_date", actions_today=2)
+    cat = await repo.get_cat(CHAT_ID, USER_ID_1)
+    assert cat["affinity"] == 0
+
+
+def test_cat_affinity_bonus_chance():
+    """Высокая привязанность увеличивает positive_chance и уменьшает negative."""
+    # affinity=100 → bonus=1.0
+    positive_100 = cfg.CAT_POSITIVE_CHANCE + (1.0 * 0.15)
+    negative_100 = max(0.05, cfg.CAT_NEGATIVE_CHANCE - (1.0 * 0.15))
+
+    # affinity=0 → bonus=0
+    positive_0 = cfg.CAT_POSITIVE_CHANCE + (0 * 0.15)
+    negative_0 = max(0.05, cfg.CAT_NEGATIVE_CHANCE - (0 * 0.15))
+
+    assert positive_100 > positive_0
+    assert negative_100 < negative_0
+
+
+@pytest.mark.asyncio
+async def test_cat_decay_affinity(setup_chat):
+    """decay_cat_affinity уменьшает привязанность для неактивных котов."""
+    today = date.today().isoformat()
+    await repo.get_cat(CHAT_ID, USER_ID_1)  # создаёт запись с affinity=25, actions_today=0
+    # Установим affinity=50 но actions_today оставим 0 (как будто вчера не играли)
+    db = await get_db()
+    await db.execute(
+        "UPDATE GameCat SET affinity=50, actions_today=0 WHERE chat_id=$1 AND user_id=$2",
+        CHAT_ID, USER_ID_1,
+    )
+    count = await repo.decay_cat_affinity()
+    assert count >= 1
+    cat = await repo.get_cat(CHAT_ID, USER_ID_1)
+    assert cat["affinity"] == 49
+
+
+# ──────────────────── Home: action tracking ────────────────────
+
+@pytest.mark.asyncio
+async def test_home_action_tracking(setup_chat):
+    """Действия по уборке сохраняются и читаются."""
+    today = date.today().isoformat()
+    done = await repo.get_home_actions_today(CHAT_ID, USER_ID_1, today)
+    assert len(done) == 0
+
+    await repo.add_home_action(CHAT_ID, USER_ID_1, "sweep", today)
+    await repo.add_home_action(CHAT_ID, USER_ID_1, "mop", today)
+
+    done = await repo.get_home_actions_today(CHAT_ID, USER_ID_1, today)
+    assert done == {"sweep", "mop"}
+
+
+@pytest.mark.asyncio
+async def test_home_action_per_user(setup_chat):
+    """Действия считаются на пользователя — один сделал, другой нет."""
+    today = date.today().isoformat()
+    await repo.add_home_action(CHAT_ID, USER_ID_1, "sweep", today)
+
+    done1 = await repo.get_home_actions_today(CHAT_ID, USER_ID_1, today)
+    done2 = await repo.get_home_actions_today(CHAT_ID, USER_ID_2, today)
+    assert "sweep" in done1
+    assert "sweep" not in done2
+
+
+def test_home_score_tier():
+    """Тиры очков правильно определяются."""
+    from app.services.games.home import _score_tier
+    assert _score_tier(5) == "low"
+    assert _score_tier(9) == "low"
+    assert _score_tier(10) == "mid"
+    assert _score_tier(14) == "mid"
+    assert _score_tier(15) == "high"
+    assert _score_tier(20) == "high"
+
+
+@pytest.mark.asyncio
+async def test_home_decay(setup_chat):
+    """Ночной распад порядка работает."""
+    await repo.update_home_order(CHAT_ID, 30)  # 50 + 30 = 80
+    await repo.decay_home_orders(min_decay=10, max_decay=10)
+    order = await repo.get_home_order(CHAT_ID)
+    assert order == 70  # 80 - 10
+
+
+@pytest.mark.asyncio
+async def test_home_reset(setup_chat):
+    """Понедельничный сброс ставит указанное значение."""
+    await repo.update_home_order(CHAT_ID, 40)  # 50 + 40 = 90
+    await repo.reset_home_orders(score=20)
+    order = await repo.get_home_order(CHAT_ID)
+    assert order == 20
+
+
+# ──────────────────── Blackjack: game logic ────────────────────
+
+def test_blackjack_deal():
+    """deal раздаёт по 2 карты игроку и дилеру."""
+    from app.services.games.blackjack import BlackjackGame
+    game = BlackjackGame(CHAT_ID, USER_ID_1, 100, 1, MagicMock())
+    game.deal()
+    assert len(game.player_hand) == 2
+    assert len(game.dealer_hand) == 2
+
+
+def test_blackjack_hit():
+    """hit добавляет 1 карту игроку."""
+    from app.services.games.blackjack import BlackjackGame
+    game = BlackjackGame(CHAT_ID, USER_ID_1, 100, 1, MagicMock())
+    game.deal()
+    game.hit()
+    assert len(game.player_hand) == 3
+
+
+def test_blackjack_dealer_play_stops_at_17():
+    """Дилер добирает до 17+."""
+    from app.services.games.blackjack import BlackjackGame, _score
+    game = BlackjackGame(CHAT_ID, USER_ID_1, 100, 1, MagicMock())
+    game.dealer_hand = ["2♠", "3♥"]  # 5
+    game._deck = ["K♠", "5♦", "4♣"]  # добирает 4+5+K=19... нет, дилер добирает по одной
+    game.dealer_play()
+    assert _score(game.dealer_hand) >= 17
+
+
+def test_blackjack_double_flag():
+    """doubled flag работает корректно."""
+    from app.services.games.blackjack import BlackjackGame
+    game = BlackjackGame(CHAT_ID, USER_ID_1, 100, 1, MagicMock())
+    assert game.doubled is False
+    game.doubled = True
+    assert game.doubled is True
+
+
+def test_blackjack_deck_52_cards():
+    """Колода содержит 52 карты."""
+    from app.services.games.blackjack import BlackjackGame
+    game = BlackjackGame(CHAT_ID, USER_ID_1, 100, 1, MagicMock())
+    assert len(game._deck) == 52
+    assert len(set(game._deck)) == 52  # все уникальные
+
+
+def test_blackjack_win_rate():
+    """_win_rate форматируется правильно."""
+    from app.services.games.blackjack import _win_rate
+    assert _win_rate({"total_games": 0, "wins": 0, "losses": 0}) == "W:0 / L:0"
+    assert "50%" in _win_rate({"total_games": 10, "wins": 5, "losses": 5})
+    assert "100%" in _win_rate({"total_games": 3, "wins": 3, "losses": 0})
+
+
+@pytest.mark.asyncio
+async def test_blackjack_loan_transfer(setup_chat):
+    """Трансфер кредитов между игроками работает."""
+    await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)  # 5000
+    await repo.get_blackjack_profile(CHAT_ID, USER_ID_2)  # 5000
+
+    ok = await repo.transfer_blackjack_credits(CHAT_ID, USER_ID_1, USER_ID_2, 1000)
+    assert ok is True
+
+    p1 = await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    p2 = await repo.get_blackjack_profile(CHAT_ID, USER_ID_2)
+    assert p1["balance"] == 4000
+    assert p2["balance"] == 6000
+
+
+@pytest.mark.asyncio
+async def test_blackjack_loan_insufficient_funds(setup_chat):
+    """Трансфер не работает при недостатке средств."""
+    await repo.get_blackjack_profile(CHAT_ID, USER_ID_1)
+    # Сначала обнулим баланс
+    await repo.update_blackjack_balance(CHAT_ID, USER_ID_1, -5000, "loss")
+
+    ok = await repo.transfer_blackjack_credits(CHAT_ID, USER_ID_1, USER_ID_2, 1000)
+    assert ok is False
+
+
+def test_blackjack_score_blackjack():
+    """Натуральный блэкджек: A + 10/J/Q/K = 21."""
+    from app.services.games.blackjack import _score
+    assert _score(["A♠", "10♥"]) == 21
+    assert _score(["A♠", "J♥"]) == 21
+    assert _score(["A♠", "Q♥"]) == 21
+    assert _score(["A♠", "K♥"]) == 21
+
+
+def test_blackjack_score_multiple_aces():
+    """Три туза = 13 (11 + 1 + 1)."""
+    from app.services.games.blackjack import _score
+    assert _score(["A♠", "A♥", "A♦"]) == 13
+
+
+def test_blackjack_score_bust():
+    """Перебор корректно считается."""
+    from app.services.games.blackjack import _score
+    assert _score(["K♠", "Q♥", "5♦"]) == 25
+
+
+# ──────────────────── Roulette: _edit_msg / _edit_or_send ────────────────────
+
+@pytest.mark.asyncio
+async def test_roulette_edit_msg_success():
+    """_edit_msg возвращает True при успехе."""
+    bot = AsyncMock()
+    game = RouletteGame(CHAT_ID, 1, bot)
+    result = await _edit_msg(game, "test text")
+    assert result is True
+    bot.edit_message_text.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_roulette_edit_msg_not_modified():
+    """_edit_msg возвращает True для 'message is not modified'."""
+    from aiogram.exceptions import TelegramBadRequest
+    bot = AsyncMock()
+    bot.edit_message_text.side_effect = TelegramBadRequest(
+        method=MagicMock(), message="Bad Request: message is not modified"
+    )
+    game = RouletteGame(CHAT_ID, 1, bot)
+    result = await _edit_msg(game, "same text")
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_roulette_edit_msg_failure():
+    """_edit_msg возвращает False при ошибке."""
+    from aiogram.exceptions import TelegramBadRequest
+    bot = AsyncMock()
+    bot.edit_message_text.side_effect = TelegramBadRequest(
+        method=MagicMock(), message="Bad Request: message to edit not found"
+    )
+    game = RouletteGame(CHAT_ID, 1, bot)
+    result = await _edit_msg(game, "text")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_roulette_edit_or_send_fallback():
+    """_edit_or_send отправляет новое сообщение если edit не удался."""
+    from aiogram.exceptions import TelegramBadRequest
+    bot = AsyncMock()
+    bot.edit_message_text.side_effect = TelegramBadRequest(
+        method=MagicMock(), message="Bad Request: message to edit not found"
+    )
+    sent_msg = MagicMock()
+    sent_msg.message_id = 999
+    bot.send_message.return_value = sent_msg
+
+    game = RouletteGame(CHAT_ID, 1, bot)
+    await _edit_or_send(game, "fallback text")
+
+    bot.send_message.assert_awaited_once()
+    assert game.msg_id == 999  # обновился на новое сообщение
+
+
+# ──────────────────── Duel: repository ────────────────────
+
+@pytest.mark.asyncio
+async def test_duel_stats_both_players(setup_chat):
+    """Статистика считается для обоих игроков."""
+    await repo.create_duel(CHAT_ID, USER_ID_1, USER_ID_2, USER_ID_1, 30)
+    await repo.create_duel(CHAT_ID, USER_ID_1, USER_ID_2, USER_ID_2, 30)
+
+    stats1 = await repo.get_duel_stats(CHAT_ID, USER_ID_1)
+    stats2 = await repo.get_duel_stats(CHAT_ID, USER_ID_2)
+    assert stats1["wins"] == 1
+    assert stats1["total"] == 2
+    assert stats2["wins"] == 1
+    assert stats2["total"] == 2
+
+
+# ──────────────────── MuteLog ────────────────────
+
+@pytest.mark.asyncio
+async def test_mute_log_and_check(setup_chat):
+    """log_mute и get_active_mute_until работают вместе."""
+    mute_until = (now_kyiv() + timedelta(minutes=30)).isoformat()
+    await repo.log_mute(CHAT_ID, USER_ID_1, "duel", mute_until)
+
+    active = await repo.get_active_mute_until(CHAT_ID, USER_ID_1)
+    assert active is not None
+
+    is_muted = await repo.is_user_muted(CHAT_ID, USER_ID_1)
+    assert is_muted is True
+
+
+@pytest.mark.asyncio
+async def test_mute_expired_not_active(setup_chat):
+    """Истёкший мут не считается активным."""
+    mute_until = (now_kyiv() - timedelta(minutes=5)).isoformat()
+    await repo.log_mute(CHAT_ID, USER_ID_1, "duel", mute_until)
+
+    is_muted = await repo.is_user_muted(CHAT_ID, USER_ID_1)
+    assert is_muted is False
+
+
+# ──────────────────── Roulette: last time with LIMIT ────────────────────
+
+@pytest.mark.asyncio
+async def test_roulette_last_time_with_many_games(setup_chat):
+    """get_last_roulette_time работает c LIMIT 50 и множеством игр."""
+    # Создадим 10 игр где USER_ID_2 не участвовал
+    for _ in range(10):
+        await repo.create_roulette(CHAT_ID, json.dumps([USER_ID_1]), USER_ID_1)
+
+    # USER_ID_2 не участвовал ни в одной
+    last = await repo.get_last_roulette_time(CHAT_ID, USER_ID_2)
+    assert last is None
+
+    # Теперь USER_ID_2 участвует в новой игре
+    await repo.create_roulette(CHAT_ID, json.dumps([USER_ID_1, USER_ID_2]), USER_ID_1)
+    last = await repo.get_last_roulette_time(CHAT_ID, USER_ID_2)
+    assert last is not None

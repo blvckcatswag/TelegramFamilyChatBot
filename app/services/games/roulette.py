@@ -5,6 +5,7 @@ import random
 from datetime import datetime, timedelta
 
 from aiogram import Router, F, Bot
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import (
     CallbackQuery, ChatPermissions, InlineKeyboardButton,
@@ -77,7 +78,6 @@ class RouletteGame:
 
     def cancel_task(self):
         if self._task and not self._task.done():
-            # Don't cancel if we're running inside this task
             try:
                 current = asyncio.current_task()
             except RuntimeError:
@@ -134,14 +134,48 @@ def _final_text(game: RouletteGame) -> str:
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
-async def _edit_msg(game: RouletteGame, text: str, kb=None):
+async def _edit_msg(game: RouletteGame, text: str, kb=None) -> bool:
+    """Edit game message. Returns True on success, False on failure."""
     try:
         await game.bot.edit_message_text(
             text, chat_id=game.chat_id, message_id=game.msg_id,
             reply_markup=kb, parse_mode="HTML",
         )
-    except Exception:
-        logger.debug("Failed to edit roulette msg chat=%s", game.chat_id)
+        return True
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e):
+            return True
+        logger.warning(
+            "Failed to edit roulette msg chat=%s msg=%s: %s",
+            game.chat_id, game.msg_id, e,
+        )
+        return False
+    except Exception as e:
+        logger.warning(
+            "Failed to edit roulette msg chat=%s msg=%s: %s",
+            game.chat_id, game.msg_id, e,
+        )
+        return False
+
+
+async def _send_fallback(game: RouletteGame, text: str, kb=None) -> bool:
+    """Send a new message if edit fails, updating game.msg_id."""
+    try:
+        sent = await game.bot.send_message(
+            game.chat_id, text, reply_markup=kb, parse_mode="HTML",
+        )
+        game.msg_id = sent.message_id
+        return True
+    except Exception as e:
+        logger.warning("Failed to send fallback msg chat=%s: %s", game.chat_id, e)
+        return False
+
+
+async def _edit_or_send(game: RouletteGame, text: str, kb=None):
+    """Try to edit the game message; if that fails, send a new one."""
+    ok = await _edit_msg(game, text, kb)
+    if not ok:
+        await _send_fallback(game, text, kb)
 
 
 async def _cleanup(chat_id: int):
@@ -154,7 +188,7 @@ async def _apply_mute(game: RouletteGame, loser: dict) -> str:
     try:
         member = await game.bot.get_chat_member(game.chat_id, loser["id"])
         if member.status in ("creator", "administrator"):
-            return f"\nℹ️ {loser['name']} — админ, мут не применён."
+            return f"\nℹ️ Мут не применён (проигравший — админ/владелец чата)."
     except Exception:
         pass
 
@@ -195,7 +229,7 @@ async def _finish_game(game: RouletteGame):
         )
 
     final = _final_text(game) + mute_text
-    await _edit_msg(game, final)
+    await _edit_or_send(game, final)
     _games.pop(game.chat_id, None)
 
 
@@ -205,14 +239,14 @@ async def _next_turn(game: RouletteGame):
 
     if not game.order:
         game.phase = "finished"
-        await _edit_msg(game, _final_text(game))
+        await _edit_or_send(game, _final_text(game))
         _games.pop(game.chat_id, None)
         return
 
     if game.current_idx >= len(game.order):
         game.current_idx = 0
 
-    await _edit_msg(game, _playing_text(game), _shoot_kb())
+    await _edit_or_send(game, _playing_text(game), _shoot_kb())
 
     game.cancel_task()
     game._task = asyncio.create_task(_turn_timeout(game))
@@ -232,7 +266,7 @@ async def _turn_timeout(game: RouletteGame):
 
     if not game.order:
         game.phase = "finished"
-        await _edit_msg(game, _final_text(game))
+        await _edit_or_send(game, _final_text(game))
         _games.pop(game.chat_id, None)
         return
 
@@ -248,7 +282,7 @@ async def _collection_timeout(game: RouletteGame):
         return
 
     if not game.players:
-        await _edit_msg(game, "🔫 Никто не присоединился. Игра отменена.")
+        await _edit_or_send(game, "🔫 Никто не присоединился. Игра отменена.")
         _games.pop(game.chat_id, None)
         return
 
@@ -264,7 +298,7 @@ async def _solo_mode(game: RouletteGame):
     game.phase = "playing"
     player = game.players[0]
 
-    await _edit_msg(game,
+    await _edit_or_send(game,
         f"🎰 <b>Соло-рулетка!</b>\n\n"
         f"🔫 {player['name']} приставляет револьвер к виску...\n\n"
         f"🫣 Барабан крутится...",
@@ -314,10 +348,19 @@ async def cmd_roulette(message: Message, bot: Bot):
             if already_in:
                 await message.answer("🔫 Ты уже в игре, жди остальных!")
             else:
-                await message.answer(
-                    f"🔫 Рулетка уже идёт! Игроков: {len(game.players)}. Жми и участвуй:",
-                    reply_markup=_join_kb(),
+                # Add directly instead of creating a second message with button
+                await repo.get_or_create_user(
+                    user_id, chat_id, message.from_user.username,
+                    message.from_user.first_name,
                 )
+                game.add_player(user_id, message.from_user.first_name)
+                await _edit_or_send(game, _collecting_text(game), _join_kb())
+                await message.answer("✅ Ты в игре!")
+
+                if len(game.players) >= 6:
+                    game.cancel_task()
+                    game.start_playing()
+                    await _next_turn(game)
         else:
             await message.answer("🔫 Рулетка уже в процессе, подожди следующего раунда.")
         return
@@ -353,12 +396,18 @@ async def cb_join(callback: CallbackQuery):
         await callback.answer("Ты уже в игре!", show_alert=True)
         return
 
-    await repo.get_or_create_user(
-        user_id, chat_id, callback.from_user.username, callback.from_user.first_name,
-    )
-    game.add_player(user_id, callback.from_user.first_name)
-    await _edit_msg(game, _collecting_text(game), _join_kb())
-    await callback.answer("✅ Ты в игре!")
+    try:
+        await repo.get_or_create_user(
+            user_id, chat_id, callback.from_user.username,
+            callback.from_user.first_name,
+        )
+        game.add_player(user_id, callback.from_user.first_name)
+        await _edit_or_send(game, _collecting_text(game), _join_kb())
+        await callback.answer("✅ Ты в игре!")
+    except Exception as e:
+        logger.error("Error joining roulette chat=%s user=%s: %s", chat_id, user_id, e)
+        await callback.answer("Ошибка, попробуй ещё раз.", show_alert=True)
+        return
 
     # 6 players — auto-start
     if len(game.players) >= 6:
@@ -382,26 +431,31 @@ async def cb_shoot(callback: CallbackQuery):
         return
 
     game.cancel_task()
-
-    # Dramatic pause — remove button, show suspense
-    suspense_text = _playing_text(game).replace("ТВОЙ ХОД", "тянет курок... 🥶")
-    await _edit_msg(game, suspense_text)
     await callback.answer()
 
-    await asyncio.sleep(SHOOT_DELAY)
+    try:
+        # Dramatic pause — remove button, show suspense
+        suspense_text = _playing_text(game).replace("ТВОЙ ХОД", "тянет курок... 🥶")
+        await _edit_or_send(game, suspense_text)
 
-    hit = game.shoot()
-    if hit:
-        game.loser = current
-        game.results.append(ROULETTE_DEATH.format(name=current["name"]))
-        await _finish_game(game)
-    else:
-        survive_text = random.choice(ROULETTE_SURVIVE).format(name=current["name"])
-        game.results.append(f"✅ {survive_text}")
-        game.current_idx += 1
-        if game.current_idx >= len(game.order):
-            game.current_idx = 0
-        await _next_turn(game)
+        await asyncio.sleep(SHOOT_DELAY)
+
+        hit = game.shoot()
+        if hit:
+            game.loser = current
+            game.results.append(ROULETTE_DEATH.format(name=current["name"]))
+            await _finish_game(game)
+        else:
+            survive_text = random.choice(ROULETTE_SURVIVE).format(name=current["name"])
+            game.results.append(f"✅ {survive_text}")
+            game.current_idx += 1
+            if game.current_idx >= len(game.order):
+                game.current_idx = 0
+            await _next_turn(game)
+    except Exception as e:
+        logger.error("Error in roulette shoot chat=%s: %s", chat_id, e)
+        # Force cleanup on critical error
+        await _cleanup(chat_id)
 
 
 @router.callback_query(F.data == "game:roulette")

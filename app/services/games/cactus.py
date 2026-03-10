@@ -1,3 +1,4 @@
+import logging
 import random
 from datetime import timedelta
 from aiogram import Router, F, Bot
@@ -12,6 +13,7 @@ from app.texts import (
 )
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 # Overwater chance by watering number today (0-indexed: 0=first, 1=second, ...)
 # First watering is always safe, then risk grows
@@ -136,9 +138,11 @@ async def cmd_cactus(message: Message, bot: Bot):
 
 @router.callback_query(F.data == "game:cactus")
 async def cb_cactus(callback: CallbackQuery, bot: Bot):
-    # callback.from_user — реальный юзер; callback.message.from_user — бот (не то!)
-    text = await _build_cactus_response(
-        callback.message.chat.id, callback.from_user.id, bot,
-    )
-    await safe_edit_text(callback.message, text, reply_markup=None)
+    try:
+        text = await _build_cactus_response(
+            callback.message.chat.id, callback.from_user.id, bot,
+        )
+        await safe_edit_text(callback.message, text, reply_markup=None)
+    except Exception as e:
+        logger.error("Error in cactus callback chat=%s: %s", callback.message.chat.id, e)
     await callback.answer()

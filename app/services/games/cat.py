@@ -1,3 +1,4 @@
+import logging
 import random
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
@@ -14,6 +15,7 @@ from app.texts import (
 )
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 # Track last bot message per user to edit instead of sending new (command path)
 _last_cat_msg: dict[tuple[int, int], int] = {}
@@ -151,10 +153,13 @@ async def _send_cat(message: Message, bot: Bot, user_id: int, action: str):
 
 async def _edit_cat(callback: CallbackQuery, bot: Bot, action: str):
     """Callback path: edit the callback message, use correct user_id."""
-    text = await _build_cat_response(
-        callback.message.chat.id, callback.from_user.id, bot, action,
-    )
-    await safe_edit_text(callback.message, text, reply_markup=None)
+    try:
+        text = await _build_cat_response(
+            callback.message.chat.id, callback.from_user.id, bot, action,
+        )
+        await safe_edit_text(callback.message, text, reply_markup=None)
+    except Exception as e:
+        logger.error("Error in cat %s chat=%s: %s", action, callback.message.chat.id, e)
     await callback.answer()
 
 

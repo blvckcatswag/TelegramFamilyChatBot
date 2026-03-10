@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, date, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -87,19 +88,22 @@ async def broadcast_weather():
     chats = await repo.get_all_active_chats()
     for chat in chats:
         chat_id = chat["chat_id"]
-        settings = await repo.get_settings(chat_id)
-        if not settings.get("weather_enabled"):
-            continue
-
-        cities = await repo.get_weather_cities(chat_id)
-        if not cities:
-            continue
-
-        text = await get_weather_for_chat(chat_id)
         try:
+            settings = await repo.get_settings(chat_id)
+            if not settings.get("weather_enabled"):
+                continue
+
+            cities = await repo.get_weather_cities(chat_id)
+            if not cities:
+                continue
+
+            # Timeout per chat: 30 sec max (even with 5 cities × 10 sec each)
+            text = await asyncio.wait_for(get_weather_for_chat(chat_id), timeout=30)
             await bot.send_message(chat_id, f"🌅 <b>Доброе утро!</b>\n\n{text}", parse_mode="HTML")
+        except asyncio.TimeoutError:
+            logger.warning("Weather broadcast timed out for chat %s", chat_id)
         except Exception as e:
-            logger.error(f"Weather broadcast failed for {chat_id}: {e}")
+            logger.error("Weather broadcast failed for %s: %s", chat_id, e)
 
 
 # ──────────────────── Birthday check ────────────────────
