@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import random
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
@@ -20,6 +21,7 @@ from app.texts import (
 )
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 SUITS = ["♠", "♥", "♦", "♣"]
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
@@ -352,19 +354,23 @@ async def cb_stake(callback: CallbackQuery, bot: Bot):
     user_id = callback.from_user.id
     key = (chat_id, user_id)
 
-    stake = int(callback.data.split(":")[2])
-    profile = await repo.get_blackjack_profile(chat_id, user_id)
+    try:
+        stake = int(callback.data.split(":")[2])
+        profile = await repo.get_blackjack_profile(chat_id, user_id)
 
-    if profile["balance"] < stake:
-        await callback.answer("Недостаточно кредитов!", show_alert=True)
-        return
+        if profile["balance"] < stake:
+            await callback.answer("Недостаточно кредитов!", show_alert=True)
+            return
 
-    game = _games.get(key)
-    if not game:
-        await callback.answer("Игра не найдена, начни заново.", show_alert=True)
-        return
+        game = _games.get(key)
+        if not game:
+            await callback.answer("Игра не найдена, начни заново.", show_alert=True)
+            return
 
-    await _start_round(chat_id, user_id, bot, callback.message.message_id, stake)
+        await _start_round(chat_id, user_id, bot, callback.message.message_id, stake)
+    except Exception as e:
+        logger.error("Error in bj:stake chat=%s user=%s: %s", chat_id, user_id, e)
+        _games.pop(key, None)
     await callback.answer()
 
 
@@ -381,19 +387,23 @@ async def cb_hit(callback: CallbackQuery):
         await callback.answer("Игра не найдена.", show_alert=True)
         return
 
-    game.cancel_task()
-    game.hit()
-    pscore = _score(game.player_hand)
+    try:
+        game.cancel_task()
+        game.hit()
+        pscore = _score(game.player_hand)
 
-    if pscore > 21:
-        await _finish(game, "loss", BJ_BUST)
-    else:
-        text = _game_text(game, dealer_hidden=True)
-        try:
-            await callback.message.edit_text(text, reply_markup=_action_kb(can_double=False), parse_mode="HTML")
-        except Exception:
-            pass
-        game._task = asyncio.create_task(_timeout_game(key))
+        if pscore > 21:
+            await _finish(game, "loss", BJ_BUST)
+        else:
+            text = _game_text(game, dealer_hidden=True)
+            try:
+                await callback.message.edit_text(text, reply_markup=_action_kb(can_double=False), parse_mode="HTML")
+            except Exception:
+                pass
+            game._task = asyncio.create_task(_timeout_game(key))
+    except Exception as e:
+        logger.error("Error in bj:hit chat=%s user=%s: %s", chat_id, user_id, e)
+        _games.pop(key, None)
 
     await callback.answer()
 
@@ -409,22 +419,27 @@ async def cb_stand(callback: CallbackQuery):
         await callback.answer("Игра не найдена.", show_alert=True)
         return
 
-    game.cancel_task()
-    game.dealer_play()
+    try:
+        game.cancel_task()
+        game.dealer_play()
 
-    pscore = _score(game.player_hand)
-    dscore = _score(game.dealer_hand)
+        pscore = _score(game.player_hand)
+        dscore = _score(game.dealer_hand)
 
-    if dscore > 21:
-        outcome, line = "win", BJ_DEALER_BUST
-    elif pscore > dscore:
-        outcome, line = "win", BJ_WIN
-    elif pscore < dscore:
-        outcome, line = "loss", BJ_LOSS
-    else:
-        outcome, line = "draw", BJ_DRAW
+        if dscore > 21:
+            outcome, line = "win", BJ_DEALER_BUST
+        elif pscore > dscore:
+            outcome, line = "win", BJ_WIN
+        elif pscore < dscore:
+            outcome, line = "loss", BJ_LOSS
+        else:
+            outcome, line = "draw", BJ_DRAW
 
-    await _finish(game, outcome, line)
+        await _finish(game, outcome, line)
+    except Exception as e:
+        logger.error("Error in bj:stand chat=%s user=%s: %s", chat_id, user_id, e)
+        _games.pop(key, None)
+
     await callback.answer()
 
 
@@ -443,34 +458,39 @@ async def cb_double_down(callback: CallbackQuery, bot: Bot):
         await callback.answer("Удвоить можно только на первых двух картах.", show_alert=True)
         return
 
-    profile = await repo.get_blackjack_profile(chat_id, user_id)
-    if profile["balance"] < game.stake:
-        await callback.answer("Недостаточно кредитов для удвоения.", show_alert=True)
-        return
+    try:
+        profile = await repo.get_blackjack_profile(chat_id, user_id)
+        if profile["balance"] < game.stake:
+            await callback.answer("Недостаточно кредитов для удвоения.", show_alert=True)
+            return
 
-    game.cancel_task()
-    game.doubled = True
-    game.hit()  # exactly one card
+        game.cancel_task()
+        game.doubled = True
+        game.hit()  # exactly one card
 
-    pscore = _score(game.player_hand)
-    if pscore > 21:
-        await _finish(game, "loss", BJ_DOUBLE_DOWN_BUST)
-        await callback.answer()
-        return
+        pscore = _score(game.player_hand)
+        if pscore > 21:
+            await _finish(game, "loss", BJ_DOUBLE_DOWN_BUST)
+            await callback.answer()
+            return
 
-    game.dealer_play()
-    dscore = _score(game.dealer_hand)
+        game.dealer_play()
+        dscore = _score(game.dealer_hand)
 
-    if dscore > 21:
-        outcome, line = "win", BJ_DOUBLE_DOWN_DEALER_BUST
-    elif pscore > dscore:
-        outcome, line = "win", BJ_DOUBLE_DOWN_WIN
-    elif pscore < dscore:
-        outcome, line = "loss", BJ_DOUBLE_DOWN_LOSS
-    else:
-        outcome, line = "draw", BJ_DRAW
+        if dscore > 21:
+            outcome, line = "win", BJ_DOUBLE_DOWN_DEALER_BUST
+        elif pscore > dscore:
+            outcome, line = "win", BJ_DOUBLE_DOWN_WIN
+        elif pscore < dscore:
+            outcome, line = "loss", BJ_DOUBLE_DOWN_LOSS
+        else:
+            outcome, line = "draw", BJ_DRAW
 
-    await _finish(game, outcome, line)
+        await _finish(game, outcome, line)
+    except Exception as e:
+        logger.error("Error in bj:double chat=%s user=%s: %s", chat_id, user_id, e)
+        _games.pop(key, None)
+
     await callback.answer()
 
 
@@ -481,34 +501,37 @@ async def cb_borrow(callback: CallbackQuery):
     chat_id = callback.message.chat.id
     user_id = callback.from_user.id
 
-    # Check if there's already a pending loan from this user
-    pending_key = next(
-        (k for k in _pending_loans if k.startswith(f"{chat_id}:{user_id}:")), None
-    )
-    if pending_key:
-        await callback.answer(BJ_LOAN_ALREADY_PENDING, show_alert=True)
-        return
+    try:
+        # Check if there's already a pending loan from this user
+        pending_key = next(
+            (k for k in _pending_loans if k.startswith(f"{chat_id}:{user_id}:")), None
+        )
+        if pending_key:
+            await callback.answer(BJ_LOAN_ALREADY_PENDING, show_alert=True)
+            return
 
-    lenders = await repo.get_blackjack_lenders(chat_id, exclude_user_id=user_id, min_balance=LOAN_AMOUNT)
-    if not lenders:
-        await callback.answer(BJ_NO_LENDERS, show_alert=True)
-        return
+        lenders = await repo.get_blackjack_lenders(chat_id, exclude_user_id=user_id, min_balance=LOAN_AMOUNT)
+        if not lenders:
+            await callback.answer(BJ_NO_LENDERS, show_alert=True)
+            return
 
-    buttons = []
-    for l in lenders:
-        name = l["first_name"] or l["username"] or "???"
-        buttons.append([InlineKeyboardButton(
-            text=f"{name} 💰{l['balance']}",
-            callback_data=f"bj:borrow_from:{l['user_id']}",
-        )])
-    buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="bj:borrow_cancel")])
+        buttons = []
+        for l in lenders:
+            name = l["first_name"] or l["username"] or "???"
+            buttons.append([InlineKeyboardButton(
+                text=f"{name} 💰{l['balance']}",
+                callback_data=f"bj:borrow_from:{l['user_id']}",
+            )])
+        buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="bj:borrow_cancel")])
 
-    await safe_edit_text(
-        callback.message,
-        BJ_LOAN_CHOOSE,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-        parse_mode="HTML",
-    )
+        await safe_edit_text(
+            callback.message,
+            BJ_LOAN_CHOOSE,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.error("Error in bj:borrow chat=%s user=%s: %s", chat_id, user_id, e)
     await callback.answer()
 
 
@@ -524,25 +547,25 @@ async def cb_borrow_from(callback: CallbackQuery, bot: Bot):
         await callback.answer(BJ_LOAN_ALREADY_PENDING, show_alert=True)
         return
 
-    requester_name = callback.from_user.first_name or callback.from_user.username or "Кто-то"
-
-    # Edit borrower's message
-    await safe_edit_text(
-        callback.message,
-        BJ_LOAN_REQUEST_SENT,
-        reply_markup=None,
-        parse_mode="HTML",
-    )
-
-    # Send notification to lender
-    accept_cb = f"bj:la:{chat_id}:{requester_id}:{lender_id}"
-    decline_cb = f"bj:ld:{chat_id}:{requester_id}:{lender_id}"
-    loan_kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="💸 Швырнуть деньги на пол", callback_data=accept_cb),
-        InlineKeyboardButton(text="🚪 Хлопнуть дверью", callback_data=decline_cb),
-    ]])
-
     try:
+        requester_name = callback.from_user.first_name or callback.from_user.username or "Кто-то"
+
+        # Edit borrower's message
+        await safe_edit_text(
+            callback.message,
+            BJ_LOAN_REQUEST_SENT,
+            reply_markup=None,
+            parse_mode="HTML",
+        )
+
+        # Send notification to lender
+        accept_cb = f"bj:la:{chat_id}:{requester_id}:{lender_id}"
+        decline_cb = f"bj:ld:{chat_id}:{requester_id}:{lender_id}"
+        loan_kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="💸 Швырнуть деньги на пол", callback_data=accept_cb),
+            InlineKeyboardButton(text="🚪 Хлопнуть дверью", callback_data=decline_cb),
+        ]])
+
         sent = await bot.send_message(
             chat_id,
             BJ_LOAN_INCOMING.format(requester=requester_name),
@@ -556,8 +579,8 @@ async def cb_borrow_from(callback: CallbackQuery, bot: Bot):
             "chat_id": chat_id,
             "loan_msg_id": sent.message_id,
         }
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Error in bj:borrow_from chat=%s: %s", chat_id, e)
 
     await callback.answer()
 
@@ -590,32 +613,35 @@ async def cb_loan_accept(callback: CallbackQuery, bot: Bot):
         await callback.answer("Запрос уже обработан.", show_alert=True)
         return
 
-    lender_name = callback.from_user.first_name or callback.from_user.username or "Кто-то"
-    ok = await repo.transfer_blackjack_credits(chat_id, lender_id, requester_id, LOAN_AMOUNT)
-    if not ok:
-        await callback.answer(BJ_LOAN_NO_FUNDS, show_alert=True)
-        _pending_loans[loan_key] = loan  # put back
-        return
-
-    # Edit loan message
     try:
-        await bot.edit_message_text(
-            BJ_LOAN_ACCEPTED_LENDER,
-            chat_id=chat_id,
-            message_id=loan["loan_msg_id"],
-            reply_markup=None,
-        )
-    except Exception:
-        pass
+        lender_name = callback.from_user.first_name or callback.from_user.username or "Кто-то"
+        ok = await repo.transfer_blackjack_credits(chat_id, lender_id, requester_id, LOAN_AMOUNT)
+        if not ok:
+            await callback.answer(BJ_LOAN_NO_FUNDS, show_alert=True)
+            _pending_loans[loan_key] = loan  # put back
+            return
 
-    # Notify borrower
-    try:
-        await bot.send_message(
-            chat_id,
-            BJ_LOAN_ACCEPTED_BORROWER.format(lender=lender_name),
-        )
-    except Exception:
-        pass
+        # Edit loan message
+        try:
+            await bot.edit_message_text(
+                BJ_LOAN_ACCEPTED_LENDER,
+                chat_id=chat_id,
+                message_id=loan["loan_msg_id"],
+                reply_markup=None,
+            )
+        except Exception:
+            pass
+
+        # Notify borrower
+        try:
+            await bot.send_message(
+                chat_id,
+                BJ_LOAN_ACCEPTED_BORROWER.format(lender=lender_name),
+            )
+        except Exception:
+            pass
+    except Exception as e:
+        logger.error("Error in loan accept chat=%s: %s", chat_id, e)
 
     await callback.answer()
 
@@ -637,25 +663,28 @@ async def cb_loan_decline(callback: CallbackQuery, bot: Bot):
         await callback.answer("Запрос уже обработан.", show_alert=True)
         return
 
-    lender_name = callback.from_user.first_name or callback.from_user.username or "Кто-то"
-
     try:
-        await bot.edit_message_text(
-            BJ_LOAN_DECLINED_LENDER,
-            chat_id=chat_id,
-            message_id=loan["loan_msg_id"],
-            reply_markup=None,
-        )
-    except Exception:
-        pass
+        lender_name = callback.from_user.first_name or callback.from_user.username or "Кто-то"
 
-    try:
-        await bot.send_message(
-            chat_id,
-            BJ_LOAN_DECLINED_BORROWER.format(lender=lender_name),
-        )
-    except Exception:
-        pass
+        try:
+            await bot.edit_message_text(
+                BJ_LOAN_DECLINED_LENDER,
+                chat_id=chat_id,
+                message_id=loan["loan_msg_id"],
+                reply_markup=None,
+            )
+        except Exception:
+            pass
+
+        try:
+            await bot.send_message(
+                chat_id,
+                BJ_LOAN_DECLINED_BORROWER.format(lender=lender_name),
+            )
+        except Exception:
+            pass
+    except Exception as e:
+        logger.error("Error in loan decline chat=%s: %s", chat_id, e)
 
     await callback.answer()
 

@@ -559,8 +559,10 @@ async def get_roulette_survival_count(chat_id: int, user_id: int) -> int:
 
 async def get_last_roulette_time(chat_id: int, user_id: int) -> str | None:
     db = await get_db()
+    # Limit scan to recent games only (cooldown is 10 min, so last 20 is plenty)
     rows = await db.fetch(
-        "SELECT created_at, participants FROM Roulette WHERE chat_id=$1 ORDER BY created_at DESC",
+        "SELECT created_at, participants FROM Roulette "
+        "WHERE chat_id=$1 ORDER BY id DESC LIMIT 50",
         chat_id,
     )
     import json

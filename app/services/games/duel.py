@@ -1,3 +1,4 @@
+import logging
 import random
 import asyncio
 from datetime import timedelta
@@ -11,6 +12,7 @@ from app.bot.keyboards import duel_accept_kb
 from app.utils.helpers import mention_user, now_kyiv, safe_edit_text, safe_edit_reply_markup
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 # In-memory pending duels: {chat_id: {challenger_id: {opponent_id, mute_minutes, msg_id, task}}}
 _pending_duels: dict[int, dict] = {}
@@ -183,48 +185,60 @@ async def cb_duel_accept(callback: CallbackQuery, bot: Bot):
     pending["task"].cancel()
     del _pending_duels[chat_id][challenger_id]
 
-    # Register users
-    await repo.get_or_create_user(acceptor_id, chat_id, callback.from_user.username, callback.from_user.first_name)
+    try:
+        # Register users
+        await repo.get_or_create_user(acceptor_id, chat_id, callback.from_user.username, callback.from_user.first_name)
 
-    # Determine winner
-    winner_id = random.choice([challenger_id, acceptor_id])
-    loser_id = acceptor_id if winner_id == challenger_id else challenger_id
+        # Determine winner
+        winner_id = random.choice([challenger_id, acceptor_id])
+        loser_id = acceptor_id if winner_id == challenger_id else challenger_id
 
-    await repo.create_duel(chat_id, challenger_id, acceptor_id, winner_id, mute_minutes)
+        await repo.create_duel(chat_id, challenger_id, acceptor_id, winner_id, mute_minutes)
 
-    # Get names
-    winner = await bot.get_chat_member(chat_id, winner_id)
-    loser = await bot.get_chat_member(chat_id, loser_id)
-    winner_name = mention_user(winner.user.first_name, winner.user.username, winner_id)
-    loser_name = mention_user(loser.user.first_name, loser.user.username, loser_id)
+        # Get names
+        winner = await bot.get_chat_member(chat_id, winner_id)
+        loser = await bot.get_chat_member(chat_id, loser_id)
+        winner_name = mention_user(winner.user.first_name, winner.user.username, winner_id)
+        loser_name = mention_user(loser.user.first_name, loser.user.username, loser_id)
 
-    result_text = (
-        f"⚔️ <b>Дуэль завершена!</b>\n\n"
-        f"🏆 Победитель: {winner_name}\n"
-        f"💀 Проигравший: {loser_name}\n"
-    )
+        result_text = (
+            f"⚔️ <b>Дуэль завершена!</b>\n\n"
+            f"🏆 Победитель: {winner_name}\n"
+            f"💀 Проигравший: {loser_name}\n"
+        )
 
-    # Try to mute loser (check if mutable first)
-    if await can_mute_user(bot, chat_id, loser_id):
+        # Try to mute loser (check if mutable first)
+        if await can_mute_user(bot, chat_id, loser_id):
+            try:
+                mute_until = now_kyiv() + timedelta(minutes=mute_minutes)
+                existing_until = await repo.get_active_mute_until(chat_id, loser_id)
+                if existing_until and existing_until >= mute_until:
+                    result_text += f"ℹ️ Мут не изменён — уже действует более длинный мут."
+                else:
+                    await bot.restrict_chat_member(
+                        chat_id, loser_id,
+                        permissions=ChatPermissions(can_send_messages=False),
+                        until_date=mute_until,
+                    )
+                    await repo.log_mute(chat_id, loser_id, "duel", mute_until.isoformat())
+                    result_text += f"🔇 Мут на {mute_minutes} мин."
+            except Exception:
+                result_text += "ℹ️ Мут не применён (бот не админ)."
+        else:
+            result_text += "ℹ️ Мут не применён (проигравший — админ/владелец чата)."
+
+        await safe_edit_text(callback.message, result_text, parse_mode="HTML")
+    except Exception as e:
+        logger.error("Error in duel accept chat=%s: %s", chat_id, e)
         try:
-            mute_until = now_kyiv() + timedelta(minutes=mute_minutes)
-            existing_until = await repo.get_active_mute_until(chat_id, loser_id)
-            if existing_until and existing_until >= mute_until:
-                result_text += f"ℹ️ Мут не изменён — уже действует более длинный мут."
-            else:
-                await bot.restrict_chat_member(
-                    chat_id, loser_id,
-                    permissions=ChatPermissions(can_send_messages=False),
-                    until_date=mute_until,
-                )
-                await repo.log_mute(chat_id, loser_id, "duel", mute_until.isoformat())
-                result_text += f"🔇 Мут на {mute_minutes} мин."
+            await safe_edit_text(
+                callback.message,
+                "⚔️ Ошибка при проведении дуэли. Попробуйте ещё раз.",
+                parse_mode="HTML",
+            )
         except Exception:
-            result_text += "ℹ️ Мут не применён (бот не админ)."
-    else:
-        result_text += "ℹ️ Мут не применён (проигравший — админ/владелец чата)."
+            pass
 
-    await safe_edit_text(callback.message, result_text, parse_mode="HTML")
     await callback.answer()
 
 

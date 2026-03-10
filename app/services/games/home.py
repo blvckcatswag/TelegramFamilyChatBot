@@ -1,3 +1,4 @@
+import logging
 import random
 from aiogram import Router, F
 from aiogram.filters import Command
@@ -13,6 +14,7 @@ from app.texts import (
 )
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 # Last home status message per chat (shared game — track per chat, not per user)
 _last_home_msg: dict[int, int] = {}
@@ -181,39 +183,42 @@ async def cb_home_action(callback: CallbackQuery):
     user_id = callback.from_user.id
     today = today_str()
 
-    s = await repo.get_settings(chat_id)
-    if not s.get("games_enabled"):
-        await callback.answer(GAMES_DISABLED, show_alert=True)
-        return
+    try:
+        s = await repo.get_settings(chat_id)
+        if not s.get("games_enabled"):
+            await callback.answer(GAMES_DISABLED, show_alert=True)
+            return
 
-    order = await repo.get_home_order(chat_id)
-    if order >= 100:
-        phrase = random.choice(HOME_ORDER_FULL_PHRASES)
-        await callback.answer(phrase, show_alert=True)
-        return
+        order = await repo.get_home_order(chat_id)
+        if order >= 100:
+            phrase = random.choice(HOME_ORDER_FULL_PHRASES)
+            await callback.answer(phrase, show_alert=True)
+            return
 
-    done_today = await repo.get_home_actions_today(chat_id, user_id, today)
-    if action in done_today:
-        not_done = [
-            f"{HOME_ACTIONS[k][0]} {HOME_ACTIONS[k][1]}"
-            for k in HOME_ACTIONS if k not in done_today
-        ]
-        suggestion = random.choice(not_done) if not_done else "отдохнуть"
-        await callback.answer(HOME_ALREADY_DONE.format(suggestion=suggestion), show_alert=True)
-        return
+        done_today = await repo.get_home_actions_today(chat_id, user_id, today)
+        if action in done_today:
+            not_done = [
+                f"{HOME_ACTIONS[k][0]} {HOME_ACTIONS[k][1]}"
+                for k in HOME_ACTIONS if k not in done_today
+            ]
+            suggestion = random.choice(not_done) if not_done else "отдохнуть"
+            await callback.answer(HOME_ALREADY_DONE.format(suggestion=suggestion), show_alert=True)
+            return
 
-    n = random.randint(5, 20)
-    tier = _score_tier(n)
-    result_text = random.choice(HOME_TEXTS[action][tier])
+        n = random.randint(5, 20)
+        tier = _score_tier(n)
+        result_text = random.choice(HOME_TEXTS[action][tier])
 
-    new_order = await repo.update_home_order(chat_id, n)
-    await repo.add_home_action(chat_id, user_id, action, today)
-    done_today.add(action)
+        new_order = await repo.update_home_order(chat_id, n)
+        await repo.add_home_action(chat_id, user_id, action, today)
+        done_today.add(action)
 
-    emoji, _ = HOME_ACTIONS[action]
-    header = f"{emoji} {result_text}\n<b>+{n} к порядку</b>\n\n"
-    text = header + _build_status(new_order, done_today)
-    await safe_edit_text(callback.message, text, reply_markup=_home_inline_kb(done_today), parse_mode="HTML")
+        emoji, _ = HOME_ACTIONS[action]
+        header = f"{emoji} {result_text}\n<b>+{n} к порядку</b>\n\n"
+        text = header + _build_status(new_order, done_today)
+        await safe_edit_text(callback.message, text, reply_markup=_home_inline_kb(done_today), parse_mode="HTML")
+    except Exception as e:
+        logger.error("Error in home action chat=%s: %s", chat_id, e)
     await callback.answer()
 
 
