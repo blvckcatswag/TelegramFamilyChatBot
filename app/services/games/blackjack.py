@@ -227,7 +227,7 @@ async def _start_round(chat_id: int, user_id: int, bot: Bot, msg_id: int, stake:
         return
 
     profile = await repo.get_blackjack_profile(chat_id, user_id)
-    can_double = profile["balance"] >= stake  # need enough for double (extra stake)
+    can_double = profile["balance"] >= stake * 2  # need enough for both the original bet and the double
     text = _game_text(game, dealer_hidden=True)
     try:
         await bot.edit_message_text(
@@ -460,7 +460,7 @@ async def cb_double_down(callback: CallbackQuery, bot: Bot):
 
     try:
         profile = await repo.get_blackjack_profile(chat_id, user_id)
-        if profile["balance"] < game.stake:
+        if profile["balance"] < game.stake * 2:
             await callback.answer("Недостаточно кредитов для удвоения.", show_alert=True)
             return
 

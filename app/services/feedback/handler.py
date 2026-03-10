@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 5
 
+# Track processed media groups to avoid creating duplicate feedback
+# when user sends multiple photos at once
+_seen_media_groups: set[str] = set()
+
 CATEGORIES = {
     "bug":       ("🐛", "Баг"),
     "idea":      ("💡", "Идея"),
@@ -102,6 +106,24 @@ async def cb_pick_category(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(FeedbackForm.waiting_content)
 async def process_feedback(message: Message, state: FSMContext) -> None:
+    # Дедупликация медиагрупп: если юзер отправил 3 фото разом,
+    # Telegram присылает 3 отдельных сообщения. Обрабатываем только первое,
+    # остальные просто форвардим суперадмину.
+    mg_id = message.media_group_id
+    if mg_id:
+        if mg_id in _seen_media_groups:
+            if cfg.SUPERADMIN_ID:
+                try:
+                    await message.forward(cfg.SUPERADMIN_ID)
+                except Exception:
+                    pass
+            return
+        _seen_media_groups.add(mg_id)
+        # Не даём set разрастаться бесконечно
+        if len(_seen_media_groups) > 100:
+            _seen_media_groups.clear()
+            _seen_media_groups.add(mg_id)
+
     has_content = bool(
         message.text or message.photo or message.voice or
         message.video or message.video_note or message.audio or
