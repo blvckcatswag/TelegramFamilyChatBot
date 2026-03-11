@@ -13,6 +13,7 @@ from app.texts import (
     BJ_BALANCE_ZERO, BJ_WEEKLY_CLAIMED, BJ_WEEKLY_COOLDOWN,
     BJ_WIN, BJ_LOSS, BJ_DRAW, BJ_BUST, BJ_DEALER_BUST,
     BJ_DOUBLE_DOWN_WIN, BJ_DOUBLE_DOWN_BUST, BJ_DOUBLE_DOWN_LOSS, BJ_DOUBLE_DOWN_DEALER_BUST,
+    BJ_NATURAL, BJ_NATURAL_PUSH,
     BJ_TIMEOUT, GAMES_DISABLED,
     BJ_NO_LENDERS, BJ_LOAN_CHOOSE, BJ_LOAN_REQUEST_SENT, BJ_LOAN_INCOMING,
     BJ_LOAN_ACCEPTED_BORROWER, BJ_LOAN_DECLINED_BORROWER,
@@ -222,8 +223,14 @@ async def _start_round(chat_id: int, user_id: int, bot: Bot, msg_id: int, stake:
     game.deal()
 
     pscore = _score(game.player_hand)
+    dscore = _score(game.dealer_hand)
+
+    # Natural blackjack check
     if pscore == 21:
-        await _finish(game, "win", BJ_WIN)
+        if dscore == 21:
+            await _finish(game, "draw", BJ_NATURAL_PUSH)
+        else:
+            await _finish(game, "win", BJ_NATURAL)
         return
 
     profile = await repo.get_blackjack_profile(chat_id, user_id)
