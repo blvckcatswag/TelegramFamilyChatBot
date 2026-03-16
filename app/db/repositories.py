@@ -918,22 +918,29 @@ async def get_blackjack_profile(chat_id: int, user_id: int) -> dict:
 
 
 async def update_blackjack_balance(chat_id: int, user_id: int, delta: int, outcome: str):
-    """outcome: 'win' | 'loss' | 'draw'"""
+    """outcome: 'win' | 'loss' | 'draw'. Atomic SQL update."""
     db = await get_db()
-    profile = await get_blackjack_profile(chat_id, user_id)
-    new_balance = max(0, profile["balance"] + delta)
-    new_max = max(profile["max_balance"], new_balance)
-    wins = profile["wins"] + (1 if outcome == "win" else 0)
-    losses = profile["losses"] + (1 if outcome == "loss" else 0)
-    draws = profile["draws"] + (1 if outcome == "draw" else 0)
-    total = profile["total_games"] + 1
+    await get_blackjack_profile(chat_id, user_id)  # ensure row exists
     await db.execute(
-        """UPDATE BlackjackProfile SET balance=$1, max_balance=$2,
-           total_games=$3, wins=$4, losses=$5, draws=$6
-           WHERE chat_id=$7 AND user_id=$8""",
-        new_balance, new_max, total, wins, losses, draws, chat_id, user_id,
+        """UPDATE BlackjackProfile
+           SET balance = GREATEST(0, balance + $1),
+               max_balance = GREATEST(max_balance, GREATEST(0, balance + $1)),
+               total_games = total_games + 1,
+               wins = wins + $2,
+               losses = losses + $3,
+               draws = draws + $4
+           WHERE chat_id = $5 AND user_id = $6""",
+        delta,
+        1 if outcome == "win" else 0,
+        1 if outcome == "loss" else 0,
+        1 if outcome == "draw" else 0,
+        chat_id, user_id,
     )
-    return new_balance
+    row = await db.fetchrow(
+        "SELECT balance FROM BlackjackProfile WHERE chat_id=$1 AND user_id=$2",
+        chat_id, user_id,
+    )
+    return row["balance"]
 
 
 async def claim_weekly_credits(chat_id: int, user_id: int):
