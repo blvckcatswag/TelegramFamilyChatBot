@@ -291,6 +291,97 @@ async def home_weekly_reset_job():
     logger.info("Home order: weekly reset to 20")
 
 
+# ──────────────────── Roulette timeouts ────────────────────
+
+async def roulette_collect_timeout(chat_id: int):
+    """Called by scheduler when collection phase expires."""
+    from app.services.games.roulette import handle_collect_timeout
+    bot = get_bot()
+    if not bot:
+        return
+    await handle_collect_timeout(chat_id, bot)
+
+
+async def roulette_turn_timeout(chat_id: int):
+    """Called by scheduler when current player's turn expires."""
+    from app.services.games.roulette import handle_turn_timeout
+    bot = get_bot()
+    if not bot:
+        return
+    await handle_turn_timeout(chat_id, bot)
+
+
+def schedule_roulette_collect(chat_id: int, seconds: int = 60):
+    s = get_scheduler()
+    run_at = now_kyiv() + timedelta(seconds=seconds)
+    s.add_job(
+        roulette_collect_timeout,
+        "date",
+        run_date=run_at,
+        args=[chat_id],
+        id=f"roulette_collect_{chat_id}",
+        replace_existing=True,
+    )
+
+
+def schedule_roulette_turn(chat_id: int, seconds: int = 60):
+    s = get_scheduler()
+    run_at = now_kyiv() + timedelta(seconds=seconds)
+    s.add_job(
+        roulette_turn_timeout,
+        "date",
+        run_date=run_at,
+        args=[chat_id],
+        id=f"roulette_turn_{chat_id}",
+        replace_existing=True,
+    )
+
+
+def cancel_roulette_job(chat_id: int, kind: str = "collect"):
+    s = get_scheduler()
+    try:
+        s.remove_job(f"roulette_{kind}_{chat_id}")
+    except Exception:
+        pass
+
+
+async def restore_active_roulettes():
+    """Restore roulette games after bot restart."""
+    from app.db import repositories as repo
+    from app.services.games.roulette import handle_collect_timeout, handle_turn_timeout
+
+    bot = get_bot()
+    if not bot:
+        return
+
+    games = await repo.get_all_active_roulettes()
+    restored = 0
+
+    for game in games:
+        chat_id = game["chat_id"]
+        phase = game["phase"]
+
+        if phase == "collecting":
+            created = game["created_at"]
+            if isinstance(created, str):
+                created = datetime.fromisoformat(created)
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=KYIV_TZ)
+            elapsed = (now_kyiv() - created).total_seconds()
+            remaining = max(1, 60 - int(elapsed))
+            if elapsed >= 60:
+                await handle_collect_timeout(chat_id, bot)
+            else:
+                schedule_roulette_collect(chat_id, remaining)
+                restored += 1
+        elif phase == "playing":
+            # Player had their chance during downtime — immediate timeout
+            await handle_turn_timeout(chat_id, bot)
+            restored += 1
+
+    logger.info("Restored %d active roulette games", restored)
+
+
 def setup_cron_jobs():
     s = get_scheduler()
 

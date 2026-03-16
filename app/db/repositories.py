@@ -86,7 +86,7 @@ async def migrate_chat(old_chat_id: int, new_chat_id: int) -> None:
     # Migrate all child tables
     child_tables = [
         '"User"', "WeatherCity", "Reminder", "Birthday",
-        "GameCactus", "GameCat", "Duel", "Roulette",
+        "GameCactus", "GameCat", "Duel", "Roulette", "RouletteActiveGame",
         "Quote", "TranslatorLog", "MuteLog", "MessageAuthor",
         "MessageReaction", "MonthlyAward", "Feedback",
     ]
@@ -555,6 +555,56 @@ async def get_roulette_survival_count(chat_id: int, user_id: int) -> int:
         if user_id in participants and r["loser_id"] != user_id:
             survived += 1
     return survived
+
+
+# ──────────────────── Roulette Active Game ────────────────────
+
+_ROULETTE_FIELDS = frozenset({
+    "msg_id", "phase", "players", "play_order",
+    "bullet_pos", "shot_count", "current_idx", "results", "loser_id",
+})
+
+
+async def create_active_roulette(chat_id: int, msg_id: int, players_json: str) -> None:
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO RouletteActiveGame (chat_id, msg_id, players) VALUES ($1, $2, $3)",
+        chat_id, msg_id, players_json,
+    )
+
+
+async def get_active_roulette(chat_id: int) -> dict | None:
+    db = await get_db()
+    return await db.fetchrow(
+        "SELECT * FROM RouletteActiveGame WHERE chat_id=$1", chat_id,
+    )
+
+
+async def get_all_active_roulettes() -> list[dict]:
+    db = await get_db()
+    return await db.fetch("SELECT * FROM RouletteActiveGame")
+
+
+async def update_active_roulette(chat_id: int, **fields) -> None:
+    if not fields:
+        return
+    bad = set(fields) - _ROULETTE_FIELDS
+    if bad:
+        raise ValueError(f"Invalid fields: {bad}")
+    db = await get_db()
+    parts = []
+    args = []
+    for i, (k, v) in enumerate(fields.items(), 1):
+        parts.append(f"{k}=${i}")
+        args.append(v)
+    args.append(chat_id)
+    sql = f"UPDATE RouletteActiveGame SET {', '.join(parts)} WHERE chat_id=${len(args)}"
+    await db.execute(sql, *args)
+
+
+async def delete_active_roulette(chat_id: int) -> None:
+    db = await get_db()
+    await db.execute("DELETE FROM RouletteActiveGame WHERE chat_id=$1", chat_id)
 
 
 async def get_last_roulette_time(chat_id: int, user_id: int) -> str | None:
