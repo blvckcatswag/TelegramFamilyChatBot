@@ -33,7 +33,10 @@ async def on_bot_added(event: ChatMemberUpdated, bot: Bot):
     # Register chat and set adder as owner
     await repo.get_or_create_chat(chat_id, event.chat.title, adder_id)
     await repo.get_or_create_user(
-        adder_id, chat_id, event.from_user.username, event.from_user.first_name, role="owner"
+        adder_id, chat_id, event.from_user.username, event.from_user.first_name, role="owner",
+        last_name=event.from_user.last_name,
+        language_code=event.from_user.language_code,
+        is_premium=bool(event.from_user.is_premium),
     )
     await repo.set_user_role(adder_id, chat_id, "owner")
 
@@ -66,7 +69,12 @@ async def cmd_transfer_owner(message: Message):
 
     new_owner = message.reply_to_message.from_user
     await repo.set_user_role(user_id, chat_id, "user")
-    await repo.get_or_create_user(new_owner.id, chat_id, new_owner.username, new_owner.first_name)
+    await repo.get_or_create_user(
+        new_owner.id, chat_id, new_owner.username, new_owner.first_name,
+        last_name=new_owner.last_name,
+        language_code=new_owner.language_code,
+        is_premium=bool(new_owner.is_premium),
+    )
     await repo.set_user_role(new_owner.id, chat_id, "owner")
     await message.answer(f"✅ OWNER передан {new_owner.first_name}!")
 

@@ -187,7 +187,12 @@ async def cb_duel_accept(callback: CallbackQuery, bot: Bot):
 
     try:
         # Register users
-        await repo.get_or_create_user(acceptor_id, chat_id, callback.from_user.username, callback.from_user.first_name)
+        await repo.get_or_create_user(
+            acceptor_id, chat_id, callback.from_user.username, callback.from_user.first_name,
+            last_name=callback.from_user.last_name,
+            language_code=callback.from_user.language_code,
+            is_premium=bool(callback.from_user.is_premium),
+        )
 
         # Determine winner
         winner_id = random.choice([challenger_id, acceptor_id])
