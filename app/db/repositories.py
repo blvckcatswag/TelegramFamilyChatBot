@@ -133,21 +133,33 @@ async def migrate_chat(old_chat_id: int, new_chat_id: int) -> None:
 # ──────────────────── User ────────────────────
 
 async def get_or_create_user(user_id: int, chat_id: int, username: str | None = None,
-                             first_name: str | None = None, role: str = "user") -> dict:
+                             first_name: str | None = None, role: str = "user",
+                             last_name: str | None = None, language_code: str | None = None,
+                             is_premium: bool = False) -> dict:
     db = await get_db()
     row = await db.fetchrow(
         'SELECT * FROM "User" WHERE user_id=$1 AND chat_id=$2', user_id, chat_id
     )
     if row:
-        if username or first_name:
-            await db.execute(
-                'UPDATE "User" SET username=COALESCE($1,username), first_name=COALESCE($2,first_name) WHERE user_id=$3 AND chat_id=$4',
-                username, first_name, user_id, chat_id,
-            )
+        await db.execute(
+            """UPDATE "User"
+               SET username=COALESCE($1,username),
+                   first_name=COALESCE($2,first_name),
+                   last_name=$3,
+                   language_code=COALESCE($4,language_code),
+                   is_premium=$5,
+                   last_seen_at=$6
+               WHERE user_id=$7 AND chat_id=$8""",
+            username, first_name, last_name, language_code, is_premium,
+            datetime.utcnow().isoformat(), user_id, chat_id,
+        )
         return dict(row)
     await db.execute(
-        'INSERT INTO "User" (user_id, chat_id, username, first_name, role) VALUES ($1, $2, $3, $4, $5)',
-        user_id, chat_id, username, first_name, role,
+        """INSERT INTO "User" (user_id, chat_id, username, first_name, last_name,
+                               language_code, is_premium, role)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+        user_id, chat_id, username, first_name, last_name,
+        language_code, is_premium, role,
     )
     row = await db.fetchrow('SELECT * FROM "User" WHERE user_id=$1 AND chat_id=$2', user_id, chat_id)
     return dict(row)

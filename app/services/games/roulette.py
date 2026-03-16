@@ -368,13 +368,19 @@ async def handle_turn_timeout(chat_id: int, bot: Bot):
 # ── Handlers ─────────────────────────────────────────────────────────
 
 async def _try_join(bot: Bot, chat_id: int, user_id: int, first_name: str,
-                    username: str | None, game: dict) -> str:
+                    username: str | None, game: dict,
+                    last_name: str | None = None, language_code: str | None = None,
+                    is_premium: bool = False) -> str:
     """Add user to an active collecting game. Returns status message."""
     players = game["players"]
     if any(p["id"] == user_id for p in players):
         return "already_in"
 
-    await repo.get_or_create_user(user_id, chat_id, username, first_name)
+    await repo.get_or_create_user(
+        user_id, chat_id, username, first_name,
+        last_name=last_name, language_code=language_code,
+        is_premium=is_premium,
+    )
     players.append({"id": user_id, "name": first_name})
     await repo.update_active_roulette(chat_id, players=json.dumps(players))
 
@@ -405,7 +411,10 @@ async def cmd_roulette(message: Message, bot: Bot):
         if game["phase"] == "collecting":
             status = await _try_join(bot, chat_id, user_id,
                                      message.from_user.first_name,
-                                     message.from_user.username, game)
+                                     message.from_user.username, game,
+                                     last_name=message.from_user.last_name,
+                                     language_code=message.from_user.language_code,
+                                     is_premium=bool(message.from_user.is_premium))
             if status == "already_in":
                 await message.answer("🔫 Ты уже в игре, жди остальных!")
             else:
@@ -458,7 +467,10 @@ async def cb_join(callback: CallbackQuery, bot: Bot):
     try:
         status = await _try_join(bot, chat_id, user_id,
                                  callback.from_user.first_name,
-                                 callback.from_user.username, game)
+                                 callback.from_user.username, game,
+                                 last_name=callback.from_user.last_name,
+                                 language_code=callback.from_user.language_code,
+                                 is_premium=bool(callback.from_user.is_premium))
         if status == "already_in":
             await callback.answer("Ты уже в игре!", show_alert=True)
         else:
@@ -545,7 +557,10 @@ async def cb_roulette_info(callback: CallbackQuery, bot: Bot):
             try:
                 status = await _try_join(bot, chat_id, user_id,
                                          callback.from_user.first_name,
-                                         callback.from_user.username, game)
+                                         callback.from_user.username, game,
+                                         last_name=callback.from_user.last_name,
+                                         language_code=callback.from_user.language_code,
+                                         is_premium=bool(callback.from_user.is_premium))
                 if status == "already_in":
                     await callback.answer("🔫 Ты уже в игре, жди остальных!", show_alert=True)
                 else:

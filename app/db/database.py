@@ -34,6 +34,7 @@ class Database:
             self._sqlite.row_factory = aiosqlite.Row
             await self._sqlite.execute("PRAGMA journal_mode=WAL")
             await self._sqlite.execute("PRAGMA foreign_keys=ON")
+            await self._sqlite.create_function("GREATEST", -1, lambda *args: max(args))
             logger.info(f"Connected to SQLite: {path}")
 
     async def close(self):
@@ -184,6 +185,10 @@ async def _run_migrations(db: Database):
         "ALTER TABLE GameCat ADD COLUMN IF NOT EXISTS last_pet_date TEXT",
         "ALTER TABLE GameCat ADD COLUMN IF NOT EXISTS last_played_date TEXT",
         "ALTER TABLE GameCat ADD COLUMN IF NOT EXISTS actions_today INTEGER DEFAULT 0",
+        'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS last_name TEXT',
+        'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS language_code TEXT',
+        'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT FALSE',
+        'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ',
     ]
     for sql in migrations:
         try:
@@ -267,6 +272,10 @@ async def _init_postgres(db: Database):
         chat_id BIGINT NOT NULL,
         username TEXT,
         first_name TEXT,
+        last_name TEXT,
+        language_code TEXT,
+        is_premium BOOLEAN DEFAULT FALSE,
+        last_seen_at TIMESTAMPTZ DEFAULT NOW(),
         role TEXT DEFAULT 'user',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(user_id, chat_id),
@@ -500,6 +509,10 @@ async def _init_sqlite(db: Database):
         chat_id INTEGER NOT NULL,
         username TEXT,
         first_name TEXT,
+        last_name TEXT,
+        language_code TEXT,
+        is_premium INTEGER DEFAULT 0,
+        last_seen_at TEXT DEFAULT (datetime('now')),
         role TEXT DEFAULT 'user',
         created_at TEXT DEFAULT (datetime('now')),
         UNIQUE(user_id, chat_id),

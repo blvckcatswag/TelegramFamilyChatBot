@@ -35,7 +35,10 @@ class RegisterMiddleware(BaseMiddleware):
 
             await repo.get_or_create_chat(chat_id, chat_title, user.id)
             await repo.get_or_create_user(
-                user.id, chat_id, user.username, user.first_name
+                user.id, chat_id, user.username, user.first_name,
+                last_name=user.last_name,
+                language_code=user.language_code,
+                is_premium=bool(user.is_premium),
             )
 
             # Track message authorship + text for reaction attribution & quotes
