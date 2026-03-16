@@ -973,8 +973,8 @@ async def update_blackjack_balance(chat_id: int, user_id: int, delta: int, outco
     await get_blackjack_profile(chat_id, user_id)  # ensure row exists
     await db.execute(
         """UPDATE BlackjackProfile
-           SET balance = MAX(0, balance + $1),
-               max_balance = MAX(max_balance, MAX(0, balance + $1)),
+           SET balance = GREATEST(0, balance + $1),
+               max_balance = GREATEST(max_balance, GREATEST(0, balance + $1)),
                total_games = total_games + 1,
                wins = wins + $2,
                losses = losses + $3,
