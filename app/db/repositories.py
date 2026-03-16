@@ -151,7 +151,7 @@ async def get_or_create_user(user_id: int, chat_id: int, username: str | None = 
                    last_seen_at=$6
                WHERE user_id=$7 AND chat_id=$8""",
             username, first_name, last_name, language_code, is_premium,
-            datetime.utcnow().isoformat(), user_id, chat_id,
+            datetime.utcnow(), user_id, chat_id,
         )
         return dict(row)
     await db.execute(
